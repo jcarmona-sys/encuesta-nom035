@@ -1,0 +1,1013 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Panel de resultados · NOM-035 · In Time Control</title>
+<style>
+:root{
+  --azul:#1f4e79; --azul-claro:#2f6fb0; --gris:#f4f6f8; --texto:#1c2733;
+  --borde:#d5dde5; --ok:#2e7d32; --alerta:#c62828; --amarillo:#f9a825;
+  --radio:10px; --sombra:0 1px 3px rgba(0,0,0,.12);
+}
+*{box-sizing:border-box}
+body{margin:0;font:16px/1.5 "Segoe UI",Roboto,system-ui,sans-serif;color:var(--texto);background:var(--gris)}
+.wrap{max-width:760px;margin:0 auto;padding:16px}
+header.app{background:var(--azul);color:#fff;padding:14px 16px}
+header.app h1{margin:0;font-size:1.05rem;font-weight:600}
+header.app small{opacity:.85}
+.card{background:#fff;border:1px solid var(--borde);border-radius:var(--radio);box-shadow:var(--sombra);padding:18px;margin:14px 0}
+h2{font-size:1.1rem;color:var(--azul);margin:.2rem 0 1rem}
+h3{font-size:.95rem;color:var(--azul-claro);margin:1.4rem 0 .4rem}
+label{display:block;font-weight:600;margin:.6rem 0 .2rem;font-size:.9rem}
+input[type=text],input[type=number],select,textarea{
+  width:100%;padding:10px;border:1px solid var(--borde);border-radius:8px;font:inherit;background:#fff}
+textarea{min-height:72px;resize:vertical}
+.btn{display:inline-block;background:var(--azul);color:#fff;border:0;border-radius:8px;
+  padding:12px 22px;font:inherit;font-weight:600;cursor:pointer}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.btn.sec{background:#fff;color:var(--azul);border:1px solid var(--azul)}
+.btn.lg{width:100%;padding:16px;font-size:1.05rem;margin-top:8px}
+.opciones-guia{display:grid;gap:12px}
+.opcion-guia{border:1px solid var(--borde);border-radius:var(--radio);padding:16px;cursor:pointer;background:#fff}
+.opcion-guia:hover{border-color:var(--azul-claro)}
+.opcion-guia b{color:var(--azul);display:block;margin-bottom:4px}
+.pregunta{padding:12px 0;border-bottom:1px solid var(--borde)}
+.pregunta:last-child{border-bottom:0}
+.pregunta .txt{font-size:.95rem;margin-bottom:8px}
+.pregunta .txt .num{color:var(--azul-claro);font-weight:700;margin-right:6px}
+.escala{display:flex;flex-wrap:wrap;gap:6px}
+.escala label{flex:1 1 auto;min-width:96px;margin:0;font-weight:400}
+.escala input{position:absolute;opacity:0}
+.escala span{display:block;text-align:center;padding:9px 6px;border:1px solid var(--borde);
+  border-radius:8px;font-size:.82rem;cursor:pointer;background:#fff}
+.escala input:checked+span{background:var(--azul);color:#fff;border-color:var(--azul)}
+.escala.sino label{flex:1 1 40%}
+.progreso{position:sticky;top:0;background:var(--gris);padding:8px 0;z-index:5}
+.barra{height:8px;background:var(--borde);border-radius:4px;overflow:hidden}
+.barra i{display:block;height:100%;background:var(--azul-claro);width:0;transition:width .2s}
+.aviso{background:#fff8e1;border:1px solid var(--amarillo);border-radius:8px;padding:12px;font-size:.88rem}
+.aviso.priv{background:#eef4fb;border-color:var(--azul-claro)}
+.err{color:var(--alerta);font-size:.85rem;margin-top:4px}
+.hidden{display:none}
+.centro{text-align:center}
+.filtro-pregunta{background:var(--gris);border-radius:8px;padding:12px;margin:8px 0}
+footer.app{text-align:center;font-size:.78rem;color:#667;padding:18px}
+.ok-msg{text-align:center;padding:30px 12px}
+.ok-msg .tick{font-size:3rem;color:var(--ok)}
+/* Panel */
+table{width:100%;border-collapse:collapse;font-size:.85rem}
+th,td{border:1px solid var(--borde);padding:6px 8px;text-align:left}
+th{background:var(--azul);color:#fff;position:sticky;top:0}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px}
+.kpi{background:#fff;border:1px solid var(--borde);border-radius:var(--radio);padding:14px;text-align:center}
+.kpi b{display:block;font-size:1.6rem;color:var(--azul)}
+.kpi small{color:#667}
+.chip{display:inline-block;padding:3px 10px;border-radius:999px;font-size:.78rem;color:#fff}
+.n-nulo{background:#66bb6a}.n-bajo{background:#9ccc65}.n-medio{background:#ffca28;color:#333}
+.n-alto{background:#ff7043}.n-muy{background:#e53935}
+.filtros{display:flex;flex-wrap:wrap;gap:10px;align-items:end}
+.filtros>div{flex:1 1 150px}
+canvas{max-width:100%}
+.tabs{display:flex;gap:4px;border-bottom:2px solid var(--borde);margin:10px 0}
+.tabs button{background:none;border:0;padding:10px 14px;cursor:pointer;font:inherit;color:#667;border-bottom:2px solid transparent;margin-bottom:-2px}
+.tabs button.act{color:var(--azul);border-color:var(--azul);font-weight:600}
+@media(max-width:520px){.escala label{min-width:calc(50% - 6px)}}
+
+</style>
+<style>
+  .wrap{max-width:1100px}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  @media(max-width:800px){.grid2{grid-template-columns:1fr}}
+  @media print{.no-print{display:none!important}header.app{background:#1f4e79!important;-webkit-print-color-adjust:exact}}
+</style>
+</head>
+<body>
+<header class="app">
+  <h1>Panel de resultados — Factores de Riesgo Psicosocial (NOM-035)</h1>
+  <small id="sub">In Time Control</small>
+</header>
+
+<div class="wrap">
+
+  <!-- Acceso -->
+  <section id="acceso" class="card">
+    <h2>Acceso restringido</h2>
+    <p style="font-size:.9rem;color:#556">Introduce la <b>clave de lectura</b> (TOKEN_LECTURA) para consultar los resultados. Esta clave sólo la conoce el personal autorizado de RH / SST y no está publicada en ningún archivo.</p>
+    <label>Clave de lectura</label>
+    <input type="password" id="tok" autocomplete="current-password">
+    <div class="err hidden" id="err-acc"></div>
+    <button class="btn lg" id="btn-acc">Entrar</button>
+  </section>
+
+  <!-- Panel -->
+  <section id="panel" class="hidden">
+
+    <div class="card no-print">
+      <div class="filtros">
+        <div><label>Campaña / periodo</label><select id="f-campana"></select></div>
+        <div><label>Cuestionario</label>
+          <select id="f-guia">
+            <option value="">General (todos)</option>
+            <option value="Guía I">Guía I — Acontecimientos traumáticos</option>
+            <option value="Guía II">Guía II — 46 reactivos</option>
+            <option value="Guía III">Guía III — 72 reactivos</option>
+          </select>
+        </div>
+        <div><label>Área</label><select id="f-area"><option value="">Todas</option></select></div>
+        <div style="flex:0 0 auto">
+          <label>&nbsp;</label>
+          <button class="btn sec" id="btn-recargar">Recargar</button>
+        </div>
+        <div style="flex:0 0 auto">
+          <label>&nbsp;</label>
+          <button class="btn sec" id="btn-excel">Exportar Excel</button>
+        </div>
+        <div style="flex:0 0 auto">
+          <label>&nbsp;</label>
+          <button class="btn sec" id="btn-pdf">Imprimir / PDF</button>
+        </div>
+      </div>
+      <p style="font-size:.8rem;color:#889;margin:.6rem 0 0" id="meta"></p>
+    </div>
+
+    <div class="card">
+      <h2 id="tit-resumen">Resumen</h2>
+      <div class="kpis" id="kpis"></div>
+    </div>
+
+    <div class="tabs no-print" id="tabs">
+      <button data-t="graficas" class="act">Gráficas</button>
+      <button data-t="concentrado">Concentrado por área</button>
+      <button data-t="individual">Detalle individual</button>
+      <button data-t="guia1">Guía I / Canalización</button>
+      <button data-t="comentarios">Comentarios</button>
+      <button data-t="historico">Histórico</button>
+    </div>
+
+    <div id="t-graficas">
+      <div class="grid2">
+        <div class="card"><h3>Distribución por nivel de riesgo</h3><canvas id="c-niveles" height="220"></canvas></div>
+        <div class="card"><h3>Participación por área</h3><canvas id="c-areas" height="220"></canvas></div>
+      </div>
+      <div class="card"><h3>Promedio de riesgo por dominio (0 = sin riesgo, 4 = máximo)</h3><canvas id="c-dominios" height="240"></canvas></div>
+      <div class="card"><h3>Reactivos con mayor riesgo promedio (top 15)</h3><canvas id="c-items" height="300"></canvas></div>
+    </div>
+
+    <div id="t-concentrado" class="hidden">
+      <div class="card">
+        <h3>Concentrado por área</h3>
+        <div style="overflow:auto"><table id="tbl-concentrado"></table></div>
+      </div>
+      <div class="card">
+        <h3>Concentrado por dominio</h3>
+        <div style="overflow:auto"><table id="tbl-dominios"></table></div>
+      </div>
+    </div>
+
+    <div id="t-individual" class="hidden">
+      <div class="card">
+        <h3>Detalle individual (<span id="n-ind">0</span>)</h3>
+        <div style="overflow:auto"><table id="tbl-individual"></table></div>
+      </div>
+    </div>
+
+    <div id="t-guia1" class="hidden">
+      <div class="card">
+        <h3>Guía I — Acontecimientos traumáticos severos</h3>
+        <div class="kpis" id="kpis-g1"></div>
+        <p style="font-size:.85rem;color:#667">Personal que reporta requerir canalización o seguimiento (usar junto con la Carta de Canalización ITC-FMT-A-004-04).</p>
+        <div style="overflow:auto"><table id="tbl-g1"></table></div>
+      </div>
+    </div>
+
+    <div id="t-comentarios" class="hidden">
+      <div class="card"><h3>Comentarios y observaciones (<span id="n-com">0</span>)</h3><div id="lista-com"></div></div>
+    </div>
+
+    <div id="t-historico" class="hidden">
+      <div class="card"><h3>Evolución del riesgo promedio por campaña</h3><canvas id="c-historico" height="220"></canvas></div>
+      <div class="card"><h3>Participación por campaña</h3><div style="overflow:auto"><table id="tbl-historico"></table></div></div>
+    </div>
+
+  </section>
+</div>
+
+<footer class="app">In Time Control · Panel de uso interno · NOM-035-STPS-2018</footer>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script>
+/* ============================================================================
+ * CONFIGURACIÓN
+ * Este archivo es PÚBLICO (se sirve al navegador). Sólo contiene el token de
+ * ESCRITURA, que únicamente permite enviar respuestas — nunca leerlas.
+ * El token de LECTURA (para el panel) NO va aquí: se teclea en el panel.
+ * ==========================================================================*/
+window.APP_CONFIG = {
+
+  /* URL del Web App de Google Apps Script (termina en /exec). */
+  API_URL: "https://script.google.com/macros/s/AKfycbwKo1zsFy486A0PNJIn2_P6gL8nOUCzAbCIcB0V0XbkoA4WpE3kO4ZzfyXP1Q8t0ZGCUA/exec",
+
+  /* Token de ESCRITURA. Debe coincidir con TOKEN_ESCRITURA en el Apps Script. */
+  TOKEN: "itc-nom035-w-4Kd92XfPq7",
+
+  /* Campaña / periodo. Cámbialo en cada aplicación anual o por centro. */
+  CAMPANA: "2026",
+
+  /* Nombre del centro de trabajo (aparece en los concentrados). */
+  CENTRO: "In Time Control",
+
+  /* Qué guías se muestran al trabajador. */
+  GUIAS_DISPONIBLES: ["I", "II", "III"],
+
+  /* Sugerencias de área para autocompletar. */
+  AREAS_SUGERIDAS: ["Administración", "Sistemas", "Operaciones", "Ventas", "Contabilidad", "Recursos Humanos", "Almacén", "Ingeniería", "Dirección"]
+};
+
+</script>
+<script>
+/* ============================================================================
+ * NOM-035-STPS-2018 — Definición de los 3 cuestionarios (Guías de Referencia I, II y III)
+ * Texto de reactivos tomado de los formatos internos:
+ *   ITC-FMT-A-004-01 / -02 / -03  (Rev.01, Enero/2026)
+ *
+ * IMPORTANTE (calificación): los mapeos de dominios/categorías y los puntos de
+ * corte están basados en la NOM-035-STPS-2018 (Guía de Referencia II y III,
+ * apartados de "Calificación"). Antes de usarse con fines de cumplimiento,
+ * el responsable de SST / especialista debe verificar este bloque contra la
+ * norma vigente. Todo es editable aquí sin tocar el resto del sistema.
+ * ==========================================================================*/
+
+window.NOM035 = (function () {
+
+  // Escalas de respuesta -----------------------------------------------------
+  const ESCALA_FREC = ["Siempre", "Casi siempre", "Algunas veces", "Casi nunca", "Nunca"];
+  const ESCALA_SINO = ["Sí", "No"];
+
+  // Valor numérico por posición en la escala de frecuencia.
+  // dir "normal": Siempre=4 ... Nunca=0   |   dir "inversa": Siempre=0 ... Nunca=4
+  function valorFrec(indice, direccion) {
+    return direccion === "inversa" ? indice : 4 - indice;
+  }
+
+  /* --------------------------------------------------------------------------
+   * GUÍA I — Acontecimientos traumáticos severos (ITC-FMT-A-004-01)
+   * Respuesta Sí/No. No genera puntaje; genera bandera de canalización.
+   * ------------------------------------------------------------------------*/
+  const GUIA_I = {
+    id: "I",
+    clave: "ITC-FMT-A-004-01",
+    titulo: "Cuestionario para identificar a los trabajadores que fueron sujetos a acontecimientos traumáticos severos",
+    escala: ESCALA_SINO,
+    secciones: [
+      {
+        titulo: "I.- Acontecimiento traumático severo",
+        ayuda: "Ha presenciado o sufrido alguna vez, durante o con motivo del trabajo un acontecimiento como los siguientes:",
+        clave: "I",
+        items: [
+          { n: 1, t: "¿Accidente que tenga como consecuencia la muerte, la pérdida de un miembro o una lesión grave?" },
+          { n: 2, t: "¿Asaltos?" },
+          { n: 3, t: "¿Actos violentos que derivaron en lesiones graves?" },
+          { n: 4, t: "¿Secuestro?" },
+          { n: 5, t: "¿Amenazas?, o" },
+          { n: 6, t: "¿Cualquier otro que ponga en riesgo su vida o salud, y/o la de otras personas?" }
+        ]
+      },
+      {
+        titulo: "II.- Recuerdos persistentes sobre el acontecimiento (durante el último mes):",
+        clave: "II",
+        items: [
+          { n: 7, t: "¿Ha tenido recuerdos recurrentes sobre el acontecimiento que le provocan malestares?" },
+          { n: 8, t: "¿Ha tenido sueños de carácter recurrente sobre el acontecimiento, que le producen malestar?" }
+        ]
+      },
+      {
+        titulo: "III.- Esfuerzo por evitar circunstancias parecidas o asociadas al acontecimiento (durante el último mes):",
+        clave: "III",
+        items: [
+          { n: 9,  t: "¿Se ha esforzado por evitar todo tipo de sentimientos, conversaciones o situaciones que le puedan recordar el acontecimiento?" },
+          { n: 10, t: "¿Se ha esforzado por evitar todo tipo de actividades, lugares o personas que motivan recuerdos del acontecimiento?" },
+          { n: 11, t: "¿Ha tenido dificultad para recordar alguna parte importante del evento?" },
+          { n: 12, t: "¿Ha disminuido su interés en sus actividades cotidianas?" },
+          { n: 13, t: "¿Se ha sentido usted alejado o distante de los demás?" },
+          { n: 14, t: "¿Ha notado que tiene dificultad para expresar sus sentimientos?" },
+          { n: 15, t: "¿Ha tenido la impresión de que su vida se va a acortar, que va a morir antes que otras personas o que tiene un futuro limitado?" }
+        ]
+      },
+      {
+        titulo: "IV.- Afectación (durante el último mes):",
+        clave: "IV",
+        items: [
+          { n: 16, t: "¿Ha tenido usted dificultades para dormir?" },
+          { n: 17, t: "¿Ha estado particularmente irritable o le han dado arranques de coraje?" },
+          { n: 18, t: "¿Ha tenido dificultad para concentrarse?" },
+          { n: 19, t: "¿Ha estado nervioso o constantemente en alerta?" },
+          { n: 20, t: "¿Se ha sobresaltado fácilmente por cualquier cosa?" }
+        ]
+      }
+    ]
+  };
+
+  /* --------------------------------------------------------------------------
+   * GUÍA II — Factores de riesgo psicosocial (ITC-FMT-A-004-02) · 46 reactivos
+   * Centros de trabajo de 16 a 50 trabajadores.
+   * ------------------------------------------------------------------------*/
+  const G2 = (n, t, dir, cond) => ({ n, t, dir: dir || "normal", cond: cond || null });
+  const GUIA_II = {
+    id: "II",
+    clave: "ITC-FMT-A-004-02",
+    titulo: "Cuestionario para identificar los factores de riesgo psicosocial en los centros de trabajo",
+    escala: ESCALA_FREC,
+    // cond: "clientes" -> sólo si respondió Sí a "brindo servicio a clientes/usuarios"
+    //       "jefe"     -> sólo si respondió Sí a "soy jefe de otros trabajadores"
+    secciones: [
+      { titulo: "Para responder las preguntas siguientes considere las condiciones de su centro de trabajo, así como la cantidad y ritmo de trabajo.", items: [
+        G2(1, "Mi trabajo me exige hacer mucho esfuerzo físico"),
+        G2(2, "Me preocupa sufrir un accidente en mi trabajo"),
+        G2(3, "Considero que las actividades que realizo son peligrosas"),
+        G2(4, "Por la cantidad de trabajo que tengo debo quedarme tiempo adicional a mi turno"),
+        G2(5, "Por la cantidad de trabajo que tengo debo trabajar sin parar"),
+        G2(6, "Considero que es necesario mantener un ritmo de trabajo acelerado"),
+        G2(7, "Mi trabajo exige que esté muy concentrado"),
+        G2(8, "Mi trabajo requiere que memorice mucha información"),
+        G2(9, "Mi trabajo exige que atienda varios asuntos al mismo tiempo")
+      ]},
+      { titulo: "Las preguntas siguientes están relacionadas con las actividades que realiza en su trabajo y las responsabilidades que tiene.", items: [
+        G2(10, "En mi trabajo soy responsable de cosas de mucho valor"),
+        G2(11, "Respondo ante mi jefe por los resultados de toda mi área de trabajo"),
+        G2(12, "En mi trabajo me dan órdenes contradictorias"),
+        G2(13, "Considero que en mi trabajo me piden hacer cosas innecesarias")
+      ]},
+      { titulo: "Las preguntas siguientes están relacionadas con el tiempo destinado a su trabajo y sus responsabilidades familiares.", items: [
+        G2(14, "Trabajo horas extras más de tres veces a la semana"),
+        G2(15, "Mi trabajo me exige laborar en días de descanso, festivos o fines de semana"),
+        G2(16, "Considero que el tiempo en el trabajo es mucho y perjudica mis actividades familiares o personales"),
+        G2(17, "Pienso en las actividades familiares o personales cuando estoy en mi trabajo")
+      ]},
+      { titulo: "Las preguntas siguientes están relacionadas con las decisiones que puede tomar en su trabajo.", items: [
+        G2(18, "Mi trabajo permite que desarrolle nuevas habilidades", "inversa"),
+        G2(19, "En mi trabajo puedo aspirar a un mejor puesto", "inversa"),
+        G2(20, "Durante mi jornada de trabajo puedo tomar pausas cuando las necesito", "inversa"),
+        G2(21, "Puedo decidir la velocidad a la que realizo mis actividades en mi trabajo", "inversa"),
+        G2(22, "Puedo cambiar el orden de las actividades que realizo en mi trabajo", "inversa")
+      ]},
+      { titulo: "Las preguntas siguientes están relacionadas con la capacitación e información que recibe sobre su trabajo.", items: [
+        G2(23, "Me informan con claridad cuáles son mis funciones", "inversa"),
+        G2(24, "Me explican claramente los resultados que debo obtener en mi trabajo", "inversa"),
+        G2(25, "Me informan con quién puedo resolver problemas o asuntos de trabajo", "inversa"),
+        G2(26, "Me permiten asistir a capacitaciones relacionadas con mi trabajo", "inversa"),
+        G2(27, "Recibo capacitación útil para hacer mi trabajo", "inversa")
+      ]},
+      { titulo: "Las preguntas siguientes se refieren a las relaciones con sus compañeros de trabajo y su jefe.", items: [
+        G2(28, "Mi jefe tiene en cuenta mis puntos de vista y opiniones", "inversa"),
+        G2(29, "Mi jefe ayuda a solucionar los problemas que se presentan en el trabajo", "inversa"),
+        G2(30, "Puedo confiar en mis compañeros de trabajo", "inversa"),
+        G2(31, "Cuando tenemos que realizar trabajo de equipo los compañeros colaboran", "inversa"),
+        G2(32, "Mis compañeros de trabajo me ayudan cuando tengo dificultades", "inversa"),
+        G2(33, "En mi trabajo puedo expresarme libremente sin interrupciones", "inversa"),
+        G2(34, "Recibo críticas constantes a mi persona y/o trabajo"),
+        G2(35, "Recibo burlas, calumnias, difamaciones, humillaciones o ridiculizaciones"),
+        G2(36, "Se ignora mi presencia o se me excluye de las reuniones de trabajo y en la toma de decisiones"),
+        G2(37, "Se manipulan las situaciones de trabajo para hacerme parecer un mal trabajador"),
+        G2(38, "Se ignoran mis éxitos laborales y se atribuyen a otros trabajadores"),
+        G2(39, "Me bloquean o impiden las oportunidades que tengo para obtener ascenso o mejora en mi trabajo"),
+        G2(40, "He presenciado actos de violencia en mi centro de trabajo")
+      ]},
+      { titulo: "Las preguntas siguientes están relacionadas con la atención a clientes y usuarios.", filtro: "clientes",
+        filtroTexto: "En mi trabajo debo brindar servicio a clientes o usuarios:", items: [
+        G2(41, "Atiendo clientes o usuarios muy enojados", "normal", "clientes"),
+        G2(42, "Mi trabajo me exige atender personas muy necesitadas de ayuda o enfermas", "normal", "clientes"),
+        G2(43, "Para hacer mi trabajo debo demostrar sentimientos distintos a los míos", "normal", "clientes")
+      ]},
+      { titulo: "Las siguientes preguntas están relacionadas con las actitudes de los trabajadores que supervisa.", filtro: "jefe",
+        filtroTexto: "Soy jefe de otros trabajadores:", items: [
+        G2(44, "Comunican tarde los asuntos de trabajo", "normal", "jefe"),
+        G2(45, "Dificultan el logro de los resultados del trabajo", "normal", "jefe"),
+        G2(46, "Ignoran las sugerencias para mejorar su trabajo", "normal", "jefe")
+      ]}
+    ],
+    // Puntaje total -> nivel de riesgo (NOM-035, Guía II)
+    cortesTotal: [
+      { max: 20,  nivel: "Nulo o despreciable" },
+      { max: 45,  nivel: "Bajo" },
+      { max: 70,  nivel: "Medio" },
+      { max: 90,  nivel: "Alto" },
+      { max: Infinity, nivel: "Muy alto" }
+    ],
+    // Categorías (agrupación de reactivos). Verificar contra la norma.
+    categorias: {
+      "Ambiente de trabajo": [1, 2, 3],
+      "Factores propios de la actividad": [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 41, 42, 43],
+      "Organización del tiempo de trabajo": [14, 15, 16, 17],
+      "Liderazgo y relaciones en el trabajo": [18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 44, 45, 46]
+    },
+    dominios: {
+      "Condiciones en el ambiente de trabajo": [1, 2, 3],
+      "Carga de trabajo": [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 41, 42, 43],
+      "Falta de control sobre el trabajo": [18, 19, 20, 21, 22, 23, 24, 25, 26, 27],
+      "Jornada de trabajo": [14, 15],
+      "Interferencia en la relación trabajo-familia": [16, 17],
+      "Liderazgo y relaciones en el trabajo": [28, 29, 30, 31, 32, 33, 44, 45, 46],
+      "Violencia": [34, 35, 36, 37, 38, 39, 40]
+    }
+  };
+
+  /* --------------------------------------------------------------------------
+   * GUÍA III — Factores de riesgo psicosocial y entorno organizacional
+   * (ITC-FMT-A-004-03) · 72 reactivos. Centros de más de 50 trabajadores.
+   * ------------------------------------------------------------------------*/
+  const G3 = (n, t, dir, cond) => ({ n, t, dir: dir || "normal", cond: cond || null });
+  const GUIA_III = {
+    id: "III",
+    clave: "ITC-FMT-A-004-03",
+    titulo: "Cuestionario para identificar los factores de riesgo psicosocial y evaluar el entorno organizacional en los centros de trabajo",
+    escala: ESCALA_FREC,
+    secciones: [
+      { titulo: "Para responder las preguntas siguientes considere las condiciones ambientales de su centro de trabajo.", items: [
+        G3(1, "El espacio donde trabajo me permite realizar mis actividades de manera segura e higiénica", "inversa"),
+        G3(2, "Mi trabajo me exige hacer mucho esfuerzo físico"),
+        G3(3, "Me preocupa sufrir un accidente en mi trabajo"),
+        G3(4, "Considero que en mi trabajo se aplican las normas de seguridad y salud en el trabajo", "inversa"),
+        G3(5, "Considero que las actividades que realizo son peligrosas")
+      ]},
+      { titulo: "Para responder a las preguntas siguientes piense en la cantidad y ritmo de trabajo que tiene.", items: [
+        G3(6, "Por la cantidad de trabajo que tengo debo quedarme tiempo adicional a mi turno"),
+        G3(7, "Por la cantidad de trabajo que tengo debo trabajar sin parar"),
+        G3(8, "Considero que es necesario mantener un ritmo de trabajo acelerado")
+      ]},
+      { titulo: "Las preguntas siguientes están relacionadas con el esfuerzo mental que le exige su trabajo.", items: [
+        G3(9, "Mi trabajo exige que esté muy concentrado"),
+        G3(10, "Mi trabajo requiere que memorice mucha información"),
+        G3(11, "En mi trabajo tengo que tomar decisiones difíciles muy rápido"),
+        G3(12, "Mi trabajo exige que atienda varios asuntos al mismo tiempo")
+      ]},
+      { titulo: "Las preguntas siguientes están relacionadas con las actividades que realiza en su trabajo y las responsabilidades que tiene.", items: [
+        G3(13, "En mi trabajo soy responsable de cosas de mucho valor"),
+        G3(14, "Respondo ante mi jefe por los resultados de toda mi área de trabajo"),
+        G3(15, "En el trabajo me dan órdenes contradictorias"),
+        G3(16, "Considero que en mi trabajo me piden hacer cosas innecesarias")
+      ]},
+      { titulo: "Las preguntas siguientes están relacionadas con su jornada de trabajo.", items: [
+        G3(17, "Trabajo horas extras más de tres veces a la semana"),
+        G3(18, "Mi trabajo me exige laborar en días de descanso, festivos o fines de semana"),
+        G3(19, "Considero que el tiempo en el trabajo es mucho y perjudica mis actividades familiares o personales"),
+        G3(20, "Debo atender asuntos de trabajo cuando estoy en casa"),
+        G3(21, "Pienso en las actividades familiares o personales cuando estoy en mi trabajo"),
+        G3(22, "Pienso que mis responsabilidades familiares afectan mi trabajo")
+      ]},
+      { titulo: "Las preguntas siguientes están relacionadas con las decisiones que puede tomar en su trabajo.", items: [
+        G3(23, "Mi trabajo permite que desarrolle nuevas habilidades", "inversa"),
+        G3(24, "En mi trabajo puedo aspirar a un mejor puesto", "inversa"),
+        G3(25, "Durante mi jornada de trabajo puedo tomar pausas cuando las necesito", "inversa"),
+        G3(26, "Puedo decidir cuánto trabajo realizo durante la jornada laboral", "inversa"),
+        G3(27, "Puedo decidir la velocidad a la que realizo mis actividades en mi trabajo", "inversa"),
+        G3(28, "Puedo cambiar el orden de las actividades que realizo en mi trabajo", "inversa")
+      ]},
+      { titulo: "Las preguntas siguientes están relacionadas con cualquier tipo de cambio que ocurra en su trabajo (considere los últimos cambios realizados).", items: [
+        G3(29, "Los cambios que se presentan en mi trabajo dificultan mi labor"),
+        G3(30, "Cuando se presentan cambios en mi trabajo se tienen en cuenta mis ideas o aportaciones", "inversa")
+      ]},
+      { titulo: "Las preguntas siguientes están relacionadas con la capacitación e información que se le proporciona sobre su trabajo.", items: [
+        G3(31, "Me informan con claridad cuáles son mis funciones", "inversa"),
+        G3(32, "Me explican claramente los resultados que debo obtener en mi trabajo", "inversa"),
+        G3(33, "Me explican claramente los objetivos de mi trabajo", "inversa"),
+        G3(34, "Me informan con quién puedo resolver problemas o asuntos de trabajo", "inversa"),
+        G3(35, "Me permiten asistir a capacitaciones relacionadas con mi trabajo", "inversa"),
+        G3(36, "Recibo capacitación útil para hacer mi trabajo", "inversa")
+      ]},
+      { titulo: "Las preguntas siguientes están relacionadas con el o los jefes con quien tiene contacto.", items: [
+        G3(37, "Mi jefe ayuda a organizar mejor el trabajo", "inversa"),
+        G3(38, "Mi jefe tiene en cuenta mis puntos de vista y opiniones", "inversa"),
+        G3(39, "Mi jefe me comunica a tiempo la información relacionada con el trabajo", "inversa"),
+        G3(40, "La orientación que me da mi jefe me ayuda a realizar mejor mi trabajo", "inversa"),
+        G3(41, "Mi jefe ayuda a solucionar los problemas que se presentan en el trabajo", "inversa")
+      ]},
+      { titulo: "Las preguntas siguientes se refieren a las relaciones con sus compañeros.", items: [
+        G3(42, "Puedo confiar en mis compañeros de trabajo", "inversa"),
+        G3(43, "Entre compañeros solucionamos los problemas de trabajo de forma respetuosa", "inversa"),
+        G3(44, "En mi trabajo me hacen sentir parte del grupo", "inversa"),
+        G3(45, "Cuando tenemos que realizar trabajo de equipo los compañeros colaboran", "inversa"),
+        G3(46, "Mis compañeros de trabajo me ayudan cuando tengo dificultades", "inversa")
+      ]},
+      { titulo: "Las preguntas siguientes están relacionadas con la información que recibe sobre su rendimiento, el reconocimiento, el sentido de pertenencia y la estabilidad en el trabajo.", items: [
+        G3(47, "Me informan sobre lo que hago bien en mi trabajo", "inversa"),
+        G3(48, "La forma como evalúan mi trabajo en mi centro de trabajo me ayuda a mejorar mi desempeño", "inversa"),
+        G3(49, "En mi centro de trabajo me pagan a tiempo mi salario", "inversa"),
+        G3(50, "El pago que recibo es el que merezco por el trabajo que realizo", "inversa"),
+        G3(51, "Si obtengo los resultados esperados en mi trabajo me recompensan o reconocen", "inversa"),
+        G3(52, "Las personas que hacen bien el trabajo pueden crecer laboralmente", "inversa"),
+        G3(53, "Considero que mi trabajo es estable", "inversa"),
+        G3(54, "En mi trabajo existe continua rotación de personal"),
+        G3(55, "Siento orgullo de laborar en este centro de trabajo", "inversa"),
+        G3(56, "Me siento comprometido con mi trabajo", "inversa")
+      ]},
+      { titulo: "Las preguntas siguientes están relacionadas con actos de violencia laboral (malos tratos, acoso, hostigamiento, acoso psicológico).", items: [
+        G3(57, "En mi trabajo puedo expresarme libremente sin interrupciones", "inversa"),
+        G3(58, "Recibo críticas constantes a mi persona y/o trabajo"),
+        G3(59, "Recibo burlas, calumnias, difamaciones, humillaciones o ridiculizaciones"),
+        G3(60, "Se ignora mi presencia o se me excluye de las reuniones de trabajo y en la toma de decisiones"),
+        G3(61, "Se manipulan las situaciones de trabajo para hacerme parecer un mal trabajador"),
+        G3(62, "Se ignoran mis éxitos laborales y se atribuyen a otros trabajadores"),
+        G3(63, "Me bloquean o impiden las oportunidades que tengo para obtener ascenso o mejora en mi trabajo"),
+        G3(64, "He presenciado actos de violencia en mi centro de trabajo")
+      ]},
+      { titulo: "Las preguntas siguientes están relacionadas con la atención a clientes y usuarios.", filtro: "clientes",
+        filtroTexto: "En mi trabajo debo brindar servicio a clientes o usuarios:", items: [
+        G3(65, "Atiendo clientes o usuarios muy enojados", "normal", "clientes"),
+        G3(66, "Mi trabajo me exige atender personas muy necesitadas de ayuda o enfermas", "normal", "clientes"),
+        G3(67, "Para hacer mi trabajo debo demostrar sentimientos distintos a los míos", "normal", "clientes"),
+        G3(68, "Mi trabajo me exige atender situaciones de violencia", "normal", "clientes")
+      ]},
+      { titulo: "Las preguntas siguientes están relacionadas con las actitudes de las personas que supervisa.", filtro: "jefe",
+        filtroTexto: "Soy jefe de otros trabajadores:", items: [
+        G3(69, "Comunican tarde los asuntos de trabajo", "normal", "jefe"),
+        G3(70, "Dificultan el logro de los resultados del trabajo", "normal", "jefe"),
+        G3(71, "Cooperan poco cuando se necesita", "normal", "jefe"),
+        G3(72, "Ignoran las sugerencias para mejorar su trabajo", "normal", "jefe")
+      ]}
+    ],
+    cortesTotal: [
+      { max: 50,  nivel: "Nulo o despreciable" },
+      { max: 75,  nivel: "Bajo" },
+      { max: 99,  nivel: "Medio" },
+      { max: 130, nivel: "Alto" },
+      { max: Infinity, nivel: "Muy alto" }
+    ],
+    categorias: {
+      "Ambiente de trabajo": [1, 2, 3, 4, 5],
+      "Factores propios de la actividad": [6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 29, 30, 65, 66, 67, 68],
+      "Organización del tiempo de trabajo": [17, 18, 19, 20, 21, 22],
+      "Liderazgo y relaciones en el trabajo": [23, 24, 25, 26, 27, 28, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 57, 58, 59, 60, 61, 62, 63, 64, 69, 70, 71, 72],
+      "Entorno organizacional": [47, 48, 49, 50, 51, 52, 53, 54, 55, 56]
+    },
+    dominios: {
+      "Condiciones en el ambiente de trabajo": [1, 2, 3, 4, 5],
+      "Carga de trabajo": [6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 65, 66, 67, 68],
+      "Falta de control sobre el trabajo": [23, 24, 25, 26, 27, 28, 29, 30, 35, 36],
+      "Jornada de trabajo": [17, 18],
+      "Interferencia en la relación trabajo-familia": [19, 20, 21, 22],
+      "Liderazgo": [37, 38, 39, 40, 41],
+      "Relaciones en el trabajo": [42, 43, 44, 45, 46, 69, 70, 71, 72],
+      "Violencia": [57, 58, 59, 60, 61, 62, 63, 64],
+      "Reconocimiento del desempeño": [47, 48, 51, 52],
+      "Insuficiente sentido de pertenencia e inestabilidad": [49, 50, 53, 54, 55, 56]
+    }
+  };
+
+  // Nivel de riesgo por puntaje total --------------------------------------
+  function nivelPorTotal(guia, total) {
+    for (const c of guia.cortesTotal) if (total < c.max || c.max === Infinity) return c.nivel;
+    return guia.cortesTotal[guia.cortesTotal.length - 1].nivel;
+  }
+
+  // Aplana los reactivos de una guía --------------------------------------
+  function itemsDe(guia) {
+    const out = [];
+    guia.secciones.forEach(s => s.items.forEach(it => out.push(Object.assign({ seccion: s.titulo, filtro: s.filtro || null }, it))));
+    return out;
+  }
+
+  /* Calcula puntaje total, por categoría y por dominio para una respuesta.
+   * respuestas: objeto { "1": idxEscala, "2": idxEscala, ... }
+   * Devuelve null para Guía I (esa se evalúa con evaluarGuiaI).           */
+  function calificar(guia, respuestas) {
+    if (guia.id === "I") return evaluarGuiaI(respuestas);
+    const items = itemsDe(guia);
+    const valor = {};
+    let total = 0;
+    items.forEach(it => {
+      const r = respuestas[it.n];
+      if (r === undefined || r === null || r === "") return; // reactivo condicional no respondido
+      const v = valorFrec(Number(r), it.dir);
+      valor[it.n] = v;
+      total += v;
+    });
+    const agrupa = grupos => {
+      const res = {};
+      for (const [nombre, nums] of Object.entries(grupos)) {
+        let suma = 0, n = 0;
+        nums.forEach(k => { if (valor[k] !== undefined) { suma += valor[k]; n++; } });
+        res[nombre] = { suma, n, promedio: n ? +(suma / n).toFixed(2) : null };
+      }
+      return res;
+    };
+    return {
+      total,
+      nivel: nivelPorTotal(guia, total),
+      categorias: agrupa(guia.categorias),
+      dominios: agrupa(guia.dominios),
+      valores: valor
+    };
+  }
+
+  /* Guía I — criterios de canalización (basados en criterios B, C y D del
+   * trastorno de estrés postraumático, DSM). Editable.                    */
+  const GUIA_I_REGLA = { reexperimentacion: 1, evitacion: 3, afectacion: 2 };
+  function evaluarGuiaI(respuestas) {
+    // respuestas: { n: "Sí"|"No" }  (n 1..20)
+    const si = n => respuestas[n] === "Sí" || respuestas[n] === "SI" || respuestas[n] === "Si";
+    const eventoTraumatico = [1, 2, 3, 4, 5, 6].some(si);
+    const reexp   = [7, 8].filter(si).length;
+    const evita   = [9, 10, 11, 12, 13, 14, 15].filter(si).length;
+    const afecta  = [16, 17, 18, 19, 20].filter(si).length;
+    const cumpleCriterios =
+      reexp  >= GUIA_I_REGLA.reexperimentacion &&
+      evita  >= GUIA_I_REGLA.evitacion &&
+      afecta >= GUIA_I_REGLA.afectacion;
+    const requiereCanalizacion = eventoTraumatico && cumpleCriterios;
+    return {
+      guiaI: true,
+      eventoTraumatico,
+      conteos: { reexperimentacion: reexp, evitacion: evita, afectacion: afecta },
+      requiereCanalizacion,
+      // Si vivió un evento traumático pero no cumple todos los criterios, igual se sugiere seguimiento.
+      sugerirSeguimiento: eventoTraumatico && !requiereCanalizacion
+    };
+  }
+
+  return {
+    GUIAS: { I: GUIA_I, II: GUIA_II, III: GUIA_III },
+    ESCALA_FREC, ESCALA_SINO,
+    itemsDe, calificar, nivelPorTotal, valorFrec,
+    NIVELES: ["Nulo o despreciable", "Bajo", "Medio", "Alto", "Muy alto"]
+  };
+})();
+
+</script>
+<script>
+/* Panel de resultados NOM-035 -------------------------------------------------*/
+(function () {
+  "use strict";
+  const cfg = window.APP_CONFIG, N = window.NOM035;
+  const $ = s => document.querySelector(s);
+  const $$ = s => [...document.querySelectorAll(s)];
+  const NIVEL_CLASE = { "Nulo o despreciable": "n-nulo", "Bajo": "n-bajo", "Medio": "n-medio", "Alto": "n-alto", "Muy alto": "n-muy" };
+  const PALETA = ["#66bb6a", "#9ccc65", "#ffca28", "#ff7043", "#e53935"];
+
+  let TOKEN = sessionStorage.getItem("nom035_token") || "";
+  let DATA = null;          // respuesta completa del API
+  let charts = {};
+
+  $("#sub").textContent = cfg.CENTRO || "In Time Control";
+  if (TOKEN) { $("#tok").value = TOKEN; }
+
+  $("#btn-acc").onclick = entrar;
+  $("#tok").addEventListener("keydown", e => { if (e.key === "Enter") entrar(); });
+
+  function entrar() {
+    TOKEN = $("#tok").value.trim();
+    if (!TOKEN) return;
+    cargar(true);
+  }
+
+  function api(params) {
+    if (!cfg.API_URL || cfg.API_URL.indexOf("PEGA_AQUI") !== -1)
+      return Promise.reject(new Error("Falta configurar API_URL en assets/config.js"));
+    const u = new URL(cfg.API_URL);
+    u.searchParams.set("token", TOKEN);
+    Object.entries(params || {}).forEach(([k, v]) => v != null && u.searchParams.set(k, v));
+    return fetch(u.toString()).then(r => r.json());
+  }
+
+  function cargar(primera) {
+    $("#err-acc").classList.add("hidden");
+    const btn = $("#btn-acc"); if (btn) { btn.disabled = true; btn.textContent = "Cargando…"; }
+    api({ action: "data" })
+      .then(res => {
+        if (!res || !res.ok) throw new Error(res && res.error ? res.error : "sin datos");
+        sessionStorage.setItem("nom035_token", TOKEN);
+        DATA = res;
+        $("#acceso").classList.add("hidden");
+        $("#panel").classList.remove("hidden");
+        prepararFiltros();
+        render();
+      })
+      .catch(err => {
+        $("#err-acc").textContent = "No se pudo entrar: " + err.message;
+        $("#err-acc").classList.remove("hidden");
+      })
+      .finally(() => { if (btn) { btn.disabled = false; btn.textContent = "Entrar"; } });
+  }
+
+  function prepararFiltros() {
+    const camp = $("#f-campana");
+    const campanas = (DATA.campanas && DATA.campanas.length ? DATA.campanas : [cfg.CAMPANA]).slice().sort();
+    camp.innerHTML = '<option value="">Todas las campañas</option>' +
+      campanas.map(c => `<option>${c}</option>`).join("");
+    if (campanas.includes(cfg.CAMPANA)) camp.value = cfg.CAMPANA;
+
+    const areas = [...new Set(DATA.respuestas.map(r => (r["Área"] || "").trim()).filter(Boolean))].sort();
+    $("#f-area").innerHTML = '<option value="">Todas</option>' + areas.map(a => `<option>${a}</option>`).join("");
+
+    $$("#f-campana,#f-guia,#f-area").forEach(s => s.onchange = render);
+    $("#btn-recargar").onclick = () => cargar();
+    $("#btn-excel").onclick = exportarExcel;
+    $("#btn-pdf").onclick = () => window.print();
+    $$("#tabs button").forEach(b => b.onclick = () => {
+      $$("#tabs button").forEach(x => x.classList.remove("act"));
+      b.classList.add("act");
+      ["graficas", "concentrado", "individual", "guia1", "comentarios", "historico"]
+        .forEach(t => $("#t-" + t).classList.toggle("hidden", t !== b.dataset.t));
+    });
+  }
+
+  /* ---- filtrado ---- */
+  function filtrar() {
+    const fc = $("#f-campana").value, fg = $("#f-guia").value, fa = $("#f-area").value;
+    const rows = DATA.respuestas.filter(r =>
+      (!fc || String(r["Campaña"]) === fc) &&
+      (!fg || r["Guía"] === fg) &&
+      (!fa || (r["Área"] || "").trim() === fa));
+    const coms = DATA.comentarios.filter(c =>
+      (!fc || String(c["Campaña"]) === fc) &&
+      (!fg || c["Guía"] === fg) &&
+      (!fa || (c["Área"] || "").trim() === fa));
+    return { rows, coms, fg };
+  }
+
+  function render() {
+    const { rows, coms, fg } = filtrar();
+    $("#meta").textContent = `Datos generados: ${new Date(DATA.generado).toLocaleString()} · ${rows.length} respuestas en el filtro actual`;
+    $("#tit-resumen").textContent = "Resumen — " + (fg || "General (todos los cuestionarios)");
+    kpis(rows);
+    graficaNiveles(rows);
+    graficaAreas(rows);
+    graficaDominios(rows);
+    graficaItems(rows, fg);
+    concentradoArea(rows);
+    concentradoDominio(rows);
+    tablaIndividual(rows);
+    guiaUno(rows);
+    comentarios(coms);
+    historico();
+  }
+
+  function chip(nivel) {
+    return `<span class="chip ${NIVEL_CLASE[nivel] || ""}">${nivel || "—"}</span>`;
+  }
+  function nuevoChart(id, cfgc) {
+    if (charts[id]) charts[id].destroy();
+    charts[id] = new Chart($("#" + id), cfgc);
+  }
+  const soloFrec = rows => rows.filter(r => r["Guía"] !== "Guía I" && r.resultado && r.resultado.total !== undefined);
+
+  /* ---- KPIs ---- */
+  function kpis(rows) {
+    const frec = soloFrec(rows);
+    const prom = frec.length ? (frec.reduce((a, r) => a + (r.resultado.total || 0), 0) / frec.length) : 0;
+    const conCanal = rows.filter(r => r.resultado && r.resultado.guiaI && r.resultado.requiereCanalizacion).length;
+    const g1 = rows.filter(r => r["Guía"] === "Guía I").length;
+    const k = [
+      ["Respuestas", rows.length, "en el filtro actual"],
+      ["Guía I", g1, "acont. traumáticos"],
+      ["Guías II/III", frec.length, "cuestionarios de riesgo"],
+      ["Puntaje promedio", frec.length ? prom.toFixed(1) : "—", "Guías II/III"],
+      ["Riesgo Alto/Muy alto", frec.filter(r => /Alto/.test(r.resultado.nivel)).length, "personas"],
+      ["Requieren canalización", conCanal, "Guía I"]
+    ];
+    $("#kpis").innerHTML = k.map(x => `<div class="kpi"><b>${x[1]}</b><small>${x[0]}<br>${x[2]}</small></div>`).join("");
+  }
+
+  /* ---- gráficas ---- */
+  function graficaNiveles(rows) {
+    const frec = soloFrec(rows);
+    const cuenta = N.NIVELES.map(nv => frec.filter(r => r.resultado.nivel === nv).length);
+    nuevoChart("c-niveles", {
+      type: "doughnut",
+      data: { labels: N.NIVELES, datasets: [{ data: cuenta, backgroundColor: PALETA }] },
+      options: { plugins: { legend: { position: "bottom" } } }
+    });
+  }
+  function graficaAreas(rows) {
+    const areas = {};
+    rows.forEach(r => { const a = (r["Área"] || "Sin área").trim() || "Sin área"; areas[a] = (areas[a] || 0) + 1; });
+    const labels = Object.keys(areas).sort();
+    nuevoChart("c-areas", {
+      type: "bar",
+      data: { labels, datasets: [{ label: "Respuestas", data: labels.map(l => areas[l]), backgroundColor: "#2f6fb0" }] },
+      options: { indexAxis: "y", plugins: { legend: { display: false } } }
+    });
+  }
+  function graficaDominios(rows) {
+    const frec = soloFrec(rows);
+    const acc = {};
+    frec.forEach(r => {
+      const dom = (r.resultado && r.resultado.dominios) || {};
+      Object.entries(dom).forEach(([k, v]) => {
+        if (v && v.promedio != null) { (acc[k] = acc[k] || []).push(v.promedio); }
+      });
+    });
+    const labels = Object.keys(acc).sort();
+    const datos = labels.map(l => +(acc[l].reduce((a, b) => a + b, 0) / acc[l].length).toFixed(2));
+    nuevoChart("c-dominios", {
+      type: "bar",
+      data: { labels, datasets: [{ label: "Promedio (0-4)", data: datos, backgroundColor: datos.map(colorPorPromedio) }] },
+      options: { indexAxis: "y", scales: { x: { max: 4 } }, plugins: { legend: { display: false } } }
+    });
+  }
+  function colorPorPromedio(p) { return p < 1 ? PALETA[0] : p < 1.75 ? PALETA[1] : p < 2.5 ? PALETA[2] : p < 3.25 ? PALETA[3] : PALETA[4]; }
+
+  function graficaItems(rows, fg) {
+    const cont = $("#c-items").parentElement;
+    if (fg !== "Guía II" && fg !== "Guía III") {
+      cont.querySelector("h3").nextElementSibling; // noop
+      $("#c-items").style.display = "none";
+      let n = cont.querySelector(".nota-items");
+      if (!n) { n = document.createElement("p"); n.className = "nota-items"; n.style.cssText = "font-size:.85rem;color:#667"; cont.appendChild(n); }
+      n.textContent = "Selecciona un cuestionario específico (Guía II o Guía III) para ver el detalle por reactivo.";
+      return;
+    }
+    $("#c-items").style.display = "";
+    const nota = cont.querySelector(".nota-items"); if (nota) nota.remove();
+    const guia = N.GUIAS[fg === "Guía II" ? "II" : "III"];
+    const items = N.itemsDe(guia);
+    const acc = {};
+    rows.forEach(r => {
+      const val = (r.resultado && r.resultado.valores) || {};
+      Object.entries(val).forEach(([k, v]) => { (acc[k] = acc[k] || []).push(v); });
+    });
+    const filas = Object.keys(acc).map(k => {
+      const it = items.find(i => String(i.n) === String(k));
+      return { n: k, txt: it ? it.t : ("Reactivo " + k), prom: acc[k].reduce((a, b) => a + b, 0) / acc[k].length };
+    }).sort((a, b) => b.prom - a.prom).slice(0, 15);
+    nuevoChart("c-items", {
+      type: "bar",
+      data: {
+        labels: filas.map(f => f.n + ". " + f.txt.slice(0, 55) + (f.txt.length > 55 ? "…" : "")),
+        datasets: [{ label: "Promedio (0-4)", data: filas.map(f => +f.prom.toFixed(2)), backgroundColor: filas.map(f => colorPorPromedio(f.prom)) }]
+      },
+      options: { indexAxis: "y", scales: { x: { max: 4 } }, plugins: { legend: { display: false } } }
+    });
+  }
+
+  /* ---- concentrados ---- */
+  function concentradoArea(rows) {
+    const frec = soloFrec(rows);
+    const areas = {};
+    frec.forEach(r => {
+      const a = (r["Área"] || "Sin área").trim() || "Sin área";
+      (areas[a] = areas[a] || []).push(r);
+    });
+    const filas = Object.keys(areas).sort().map(a => {
+      const g = areas[a];
+      const prom = g.reduce((s, r) => s + r.resultado.total, 0) / g.length;
+      const dist = N.NIVELES.map(nv => g.filter(r => r.resultado.nivel === nv).length);
+      const guiaRef = g[0]["Guía"] === "Guía III" ? N.GUIAS.III : N.GUIAS.II;
+      const nivelProm = N.nivelPorTotal(guiaRef, prom);
+      return { a, n: g.length, prom: prom.toFixed(1), nivelProm, dist };
+    });
+    let html = "<tr><th>Área</th><th>n</th><th>Puntaje promedio</th><th>Nivel (promedio)</th>" +
+      N.NIVELES.map(nv => `<th>${nv}</th>`).join("") + "</tr>";
+    html += filas.map(f => `<tr><td>${f.a}</td><td>${f.n}</td><td>${f.prom}</td><td>${chip(f.nivelProm)}</td>` +
+      f.dist.map(d => `<td>${d || ""}</td>`).join("") + "</tr>").join("");
+    if (!filas.length) html = "<tr><td>Sin datos de Guías II/III en el filtro.</td></tr>";
+    $("#tbl-concentrado").innerHTML = html;
+  }
+
+  function concentradoDominio(rows) {
+    const frec = soloFrec(rows);
+    const porArea = {};
+    const dominios = new Set();
+    frec.forEach(r => {
+      const a = (r["Área"] || "Sin área").trim() || "Sin área";
+      porArea[a] = porArea[a] || {};
+      Object.entries((r.resultado && r.resultado.dominios) || {}).forEach(([k, v]) => {
+        if (v && v.promedio != null) { (porArea[a][k] = porArea[a][k] || []).push(v.promedio); dominios.add(k); }
+      });
+    });
+    const doms = [...dominios].sort();
+    let html = "<tr><th>Área</th>" + doms.map(d => `<th>${d}</th>`).join("") + "</tr>";
+    html += Object.keys(porArea).sort().map(a => {
+      return `<tr><td>${a}</td>` + doms.map(d => {
+        const arr = porArea[a][d];
+        if (!arr) return "<td>—</td>";
+        const p = arr.reduce((x, y) => x + y, 0) / arr.length;
+        return `<td style="background:${colorPorPromedio(p)}22">${p.toFixed(2)}</td>`;
+      }).join("") + "</tr>";
+    }).join("");
+    if (!doms.length) html = "<tr><td>Sin datos de Guías II/III en el filtro.</td></tr>";
+    $("#tbl-dominios").innerHTML = html;
+  }
+
+  /* ---- detalle individual ---- */
+  function tablaIndividual(rows) {
+    $("#n-ind").textContent = rows.length;
+    let html = "<tr><th>Fecha</th><th>Guía</th><th>Nombre</th><th>Área</th><th>Puesto</th><th>Puntaje</th><th>Nivel</th><th>Coment.</th></tr>";
+    html += rows.slice().reverse().map(r => {
+      const res = r.resultado || {};
+      const puntaje = res.total !== undefined ? res.total : (res.guiaI ? "—" : "");
+      const nivel = res.nivel || (res.guiaI ? (res.requiereCanalizacion ? "Canalización" : (res.sugerirSeguimiento ? "Seguimiento" : "Sin indicador")) : "");
+      return `<tr><td>${fFecha(r["Marca temporal"])}</td><td>${r["Guía"]}</td><td>${r["Nombre"] || "<i>(anónimo)</i>"}</td>` +
+        `<td>${r["Área"] || ""}</td><td>${r["Puesto"] || ""}</td><td>${puntaje}</td><td>${res.nivel ? chip(nivel) : nivel}</td>` +
+        `<td>${r["Tiene comentarios"] === "Sí" ? "Sí" : ""}</td></tr>`;
+    }).join("");
+    $("#tbl-individual").innerHTML = html;
+  }
+
+  /* ---- Guía I ---- */
+  function guiaUno(rows) {
+    const g1 = rows.filter(r => r["Guía"] === "Guía I" && r.resultado);
+    const canal = g1.filter(r => r.resultado.requiereCanalizacion);
+    const seg = g1.filter(r => r.resultado.sugerirSeguimiento);
+    const evento = g1.filter(r => r.resultado.eventoTraumatico);
+    $("#kpis-g1").innerHTML = [
+      ["Respuestas Guía I", g1.length], ["Reportan evento traumático", evento.length],
+      ["Requieren canalización", canal.length], ["Sugieren seguimiento", seg.length]
+    ].map(x => `<div class="kpi"><b>${x[1]}</b><small>${x[0]}</small></div>`).join("");
+    let html = "<tr><th>Fecha</th><th>Nombre</th><th>Área</th><th>Puesto</th><th>Evento</th><th>Reexp.</th><th>Evitación</th><th>Afectación</th><th>Indicador</th></tr>";
+    html += g1.filter(r => r.resultado.requiereCanalizacion || r.resultado.sugerirSeguimiento).slice().reverse().map(r => {
+      const x = r.resultado, c = x.conteos || {};
+      return `<tr><td>${fFecha(r["Marca temporal"])}</td><td>${r["Nombre"] || "<i>(anónimo)</i>"}</td><td>${r["Área"] || ""}</td><td>${r["Puesto"] || ""}</td>` +
+        `<td>${x.eventoTraumatico ? "Sí" : "No"}</td><td>${c.reexperimentacion}</td><td>${c.evitacion}</td><td>${c.afectacion}</td>` +
+        `<td>${x.requiereCanalizacion ? '<span class="chip n-muy">Canalización</span>' : '<span class="chip n-medio">Seguimiento</span>'}</td></tr>`;
+    }).join("");
+    if (!g1.length) html = "<tr><td>Sin respuestas de Guía I en el filtro.</td></tr>";
+    $("#tbl-g1").innerHTML = html;
+  }
+
+  /* ---- comentarios ---- */
+  function comentarios(coms) {
+    $("#n-com").textContent = coms.length;
+    $("#lista-com").innerHTML = coms.length ? coms.slice().reverse().map(c =>
+      `<div class="aviso" style="margin:8px 0">
+        <div style="font-size:.78rem;color:#667">${fFecha(c["Marca temporal"])} · ${c["Guía"]} · ${c["Área"] || "sin área"} · ${c["Puesto"] || ""} ${c["Nombre"] ? "· " + c["Nombre"] : ""}</div>
+        <div style="margin-top:4px">${escapar(c["Comentario"] || "")}</div>
+      </div>`).join("") : "<p style='color:#667'>Sin comentarios en el filtro actual.</p>";
+  }
+
+  /* ---- histórico ---- */
+  function historico() {
+    const porCamp = {};
+    DATA.respuestas.forEach(r => {
+      if (r["Guía"] === "Guía I" || !r.resultado || r.resultado.total === undefined) return;
+      const c = String(r["Campaña"] || "—");
+      (porCamp[c] = porCamp[c] || []).push(r.resultado.total);
+    });
+    const labels = Object.keys(porCamp).sort();
+    nuevoChart("c-historico", {
+      type: "line",
+      data: { labels, datasets: [{ label: "Puntaje promedio (Guías II/III)", data: labels.map(l => +(porCamp[l].reduce((a, b) => a + b, 0) / porCamp[l].length).toFixed(1)), borderColor: "#1f4e79", tension: .25, fill: false }] },
+      options: { scales: { y: { beginAtZero: true } } }
+    });
+    const cont = {};
+    DATA.respuestas.forEach(r => { const c = String(r["Campaña"] || "—"); cont[c] = cont[c] || { t: 0, g1: 0, g2: 0, g3: 0 }; cont[c].t++; if (r["Guía"] === "Guía I") cont[c].g1++; if (r["Guía"] === "Guía II") cont[c].g2++; if (r["Guía"] === "Guía III") cont[c].g3++; });
+    let html = "<tr><th>Campaña</th><th>Total</th><th>Guía I</th><th>Guía II</th><th>Guía III</th><th>Puntaje prom.</th></tr>";
+    html += Object.keys(cont).sort().map(c => `<tr><td>${c}</td><td>${cont[c].t}</td><td>${cont[c].g1}</td><td>${cont[c].g2}</td><td>${cont[c].g3}</td><td>${porCamp[c] ? (porCamp[c].reduce((a, b) => a + b, 0) / porCamp[c].length).toFixed(1) : "—"}</td></tr>`).join("");
+    $("#tbl-historico").innerHTML = html;
+  }
+
+  /* ---- exportar Excel ---- */
+  function exportarExcel() {
+    const { rows, coms, fg } = filtrar();
+    const wb = XLSX.utils.book_new();
+    const plano = rows.map(r => {
+      const res = r.resultado || {};
+      const base = {
+        Fecha: fFecha(r["Marca temporal"]), Campaña: r["Campaña"], Guía: r["Guía"],
+        Nombre: r["Nombre"] || "", Área: r["Área"] || "", Puesto: r["Puesto"] || "",
+        Sexo: r["Sexo"] || "", Antigüedad: r["Antigüedad"] || "", "Tipo personal": r["Tipo personal"] || "",
+        "Puntaje total": res.total !== undefined ? res.total : "",
+        "Nivel de riesgo": res.nivel || "",
+        "Evento traumático": res.guiaI ? (res.eventoTraumatico ? "Sí" : "No") : "",
+        "Requiere canalización": res.guiaI ? (res.requiereCanalizacion ? "Sí" : "No") : "",
+        Comentarios: r["Tiene comentarios"] === "Sí" ? "Sí" : ""
+      };
+      const dom = res.dominios || {};
+      Object.entries(dom).forEach(([k, v]) => { base["Dom: " + k] = v && v.promedio != null ? v.promedio : ""; });
+      return base;
+    });
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(plano), "Respuestas");
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(coms.map(c => ({
+      Fecha: fFecha(c["Marca temporal"]), Campaña: c["Campaña"], Guía: c["Guía"], Área: c["Área"] || "",
+      Puesto: c["Puesto"] || "", Nombre: c["Nombre"] || "", Comentario: c["Comentario"] || ""
+    }))), "Comentarios");
+    // Concentrado por área (tabla actual)
+    const conc = tablaAObjetos($("#tbl-concentrado"));
+    if (conc.length) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(conc), "Concentrado área");
+    const cd = tablaAObjetos($("#tbl-dominios"));
+    if (cd.length) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(cd), "Concentrado dominio");
+    const suf = (fg || "General").replace(/[^\wáéíóúñ ]/gi, "").replace(/\s+/g, "-");
+    XLSX.writeFile(wb, `NOM035_${cfg.CENTRO || "centro"}_${suf}_${new Date().toISOString().slice(0, 10)}.xlsx`);
+  }
+
+  function tablaAObjetos(tabla) {
+    const tr = [...tabla.querySelectorAll("tr")];
+    if (tr.length < 2) return [];
+    const enc = [...tr[0].children].map(t => t.textContent.trim());
+    return tr.slice(1).map(f => {
+      const o = {}; [...f.children].forEach((td, i) => o[enc[i] || ("c" + i)] = td.textContent.trim()); return o;
+    });
+  }
+
+  /* ---- helpers ---- */
+  function fFecha(v) { if (!v) return ""; const d = new Date(v); return isNaN(d) ? String(v) : d.toLocaleString(); }
+  function escapar(s) { const d = document.createElement("div"); d.textContent = s; return d.innerHTML; }
+
+  // Autologin si ya había token
+  if (TOKEN && cfg.API_URL && cfg.API_URL.indexOf("PEGA_AQUI") === -1) cargar();
+})();
+
+</script>
+</body>
+</html>

@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Generador de QR · Encuesta NOM-035</title>
+<style>
+:root{
+  --azul:#1f4e79; --azul-claro:#2f6fb0; --gris:#f4f6f8; --texto:#1c2733;
+  --borde:#d5dde5; --ok:#2e7d32; --alerta:#c62828; --amarillo:#f9a825;
+  --radio:10px; --sombra:0 1px 3px rgba(0,0,0,.12);
+}
+*{box-sizing:border-box}
+body{margin:0;font:16px/1.5 "Segoe UI",Roboto,system-ui,sans-serif;color:var(--texto);background:var(--gris)}
+.wrap{max-width:760px;margin:0 auto;padding:16px}
+header.app{background:var(--azul);color:#fff;padding:14px 16px}
+header.app h1{margin:0;font-size:1.05rem;font-weight:600}
+header.app small{opacity:.85}
+.card{background:#fff;border:1px solid var(--borde);border-radius:var(--radio);box-shadow:var(--sombra);padding:18px;margin:14px 0}
+h2{font-size:1.1rem;color:var(--azul);margin:.2rem 0 1rem}
+h3{font-size:.95rem;color:var(--azul-claro);margin:1.4rem 0 .4rem}
+label{display:block;font-weight:600;margin:.6rem 0 .2rem;font-size:.9rem}
+input[type=text],input[type=number],select,textarea{
+  width:100%;padding:10px;border:1px solid var(--borde);border-radius:8px;font:inherit;background:#fff}
+textarea{min-height:72px;resize:vertical}
+.btn{display:inline-block;background:var(--azul);color:#fff;border:0;border-radius:8px;
+  padding:12px 22px;font:inherit;font-weight:600;cursor:pointer}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.btn.sec{background:#fff;color:var(--azul);border:1px solid var(--azul)}
+.btn.lg{width:100%;padding:16px;font-size:1.05rem;margin-top:8px}
+.opciones-guia{display:grid;gap:12px}
+.opcion-guia{border:1px solid var(--borde);border-radius:var(--radio);padding:16px;cursor:pointer;background:#fff}
+.opcion-guia:hover{border-color:var(--azul-claro)}
+.opcion-guia b{color:var(--azul);display:block;margin-bottom:4px}
+.pregunta{padding:12px 0;border-bottom:1px solid var(--borde)}
+.pregunta:last-child{border-bottom:0}
+.pregunta .txt{font-size:.95rem;margin-bottom:8px}
+.pregunta .txt .num{color:var(--azul-claro);font-weight:700;margin-right:6px}
+.escala{display:flex;flex-wrap:wrap;gap:6px}
+.escala label{flex:1 1 auto;min-width:96px;margin:0;font-weight:400}
+.escala input{position:absolute;opacity:0}
+.escala span{display:block;text-align:center;padding:9px 6px;border:1px solid var(--borde);
+  border-radius:8px;font-size:.82rem;cursor:pointer;background:#fff}
+.escala input:checked+span{background:var(--azul);color:#fff;border-color:var(--azul)}
+.escala.sino label{flex:1 1 40%}
+.progreso{position:sticky;top:0;background:var(--gris);padding:8px 0;z-index:5}
+.barra{height:8px;background:var(--borde);border-radius:4px;overflow:hidden}
+.barra i{display:block;height:100%;background:var(--azul-claro);width:0;transition:width .2s}
+.aviso{background:#fff8e1;border:1px solid var(--amarillo);border-radius:8px;padding:12px;font-size:.88rem}
+.aviso.priv{background:#eef4fb;border-color:var(--azul-claro)}
+.err{color:var(--alerta);font-size:.85rem;margin-top:4px}
+.hidden{display:none}
+.centro{text-align:center}
+.filtro-pregunta{background:var(--gris);border-radius:8px;padding:12px;margin:8px 0}
+footer.app{text-align:center;font-size:.78rem;color:#667;padding:18px}
+.ok-msg{text-align:center;padding:30px 12px}
+.ok-msg .tick{font-size:3rem;color:var(--ok)}
+/* Panel */
+table{width:100%;border-collapse:collapse;font-size:.85rem}
+th,td{border:1px solid var(--borde);padding:6px 8px;text-align:left}
+th{background:var(--azul);color:#fff;position:sticky;top:0}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px}
+.kpi{background:#fff;border:1px solid var(--borde);border-radius:var(--radio);padding:14px;text-align:center}
+.kpi b{display:block;font-size:1.6rem;color:var(--azul)}
+.kpi small{color:#667}
+.chip{display:inline-block;padding:3px 10px;border-radius:999px;font-size:.78rem;color:#fff}
+.n-nulo{background:#66bb6a}.n-bajo{background:#9ccc65}.n-medio{background:#ffca28;color:#333}
+.n-alto{background:#ff7043}.n-muy{background:#e53935}
+.filtros{display:flex;flex-wrap:wrap;gap:10px;align-items:end}
+.filtros>div{flex:1 1 150px}
+canvas{max-width:100%}
+.tabs{display:flex;gap:4px;border-bottom:2px solid var(--borde);margin:10px 0}
+.tabs button{background:none;border:0;padding:10px 14px;cursor:pointer;font:inherit;color:#667;border-bottom:2px solid transparent;margin-bottom:-2px}
+.tabs button.act{color:var(--azul);border-color:var(--azul);font-weight:600}
+@media(max-width:520px){.escala label{min-width:calc(50% - 6px)}}
+
+</style>
+</head>
+<body>
+<header class="app"><h1>Generador de código QR — Encuesta NOM-035</h1></header>
+<div class="wrap">
+  <section class="card">
+    <p style="font-size:.9rem;color:#556">Pega la dirección pública del cuestionario (por ejemplo la URL de GitHub Pages que termina en <code>/index.html</code>). Se genera un QR que puedes imprimir y colocar en pizarrones, comedor, accesos, etc.</p>
+    <label>Dirección del cuestionario</label>
+    <input type="text" id="url" placeholder="https://usuario.github.io/encuesta-nom035/">
+    <label>Texto al pie (opcional)</label>
+    <input type="text" id="pie" value="Encuesta de Factores de Riesgo Psicosocial — NOM-035. Confidencial.">
+    <button class="btn lg" id="gen">Generar QR</button>
+  </section>
+  <section class="card centro" id="salida" style="display:none">
+    <div id="qr" style="display:inline-block;padding:16px;background:#fff"></div>
+    <p id="pie-txt" style="max-width:320px;margin:10px auto;font-size:.85rem"></p>
+    <button class="btn sec" id="descargar">Descargar PNG</button>
+    <button class="btn sec" onclick="window.print()">Imprimir</button>
+  </section>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script>
+  const $ = s => document.querySelector(s);
+  $("#gen").onclick = () => {
+    const url = $("#url").value.trim();
+    if (!url) return;
+    $("#qr").innerHTML = "";
+    new QRCode($("#qr"), { text: url, width: 300, height: 300, correctLevel: QRCode.CorrectLevel.M });
+    $("#pie-txt").textContent = $("#pie").value.trim();
+    $("#salida").style.display = "";
+  };
+  $("#descargar").onclick = () => {
+    const img = $("#qr").querySelector("img") || $("#qr").querySelector("canvas");
+    let data = img.tagName === "IMG" ? img.src : img.toDataURL("image/png");
+    const a = document.createElement("a");
+    a.href = data; a.download = "qr-encuesta-nom035.png"; a.click();
+  };
+</script>
+</body>
+</html>
