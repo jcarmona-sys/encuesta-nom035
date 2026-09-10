@@ -781,6 +781,7 @@ window.NOM035 = (function () {
   }
 
   function finalizar(calif) {
+    $("#estado-envio").textContent = "";
     $("#paso-preguntas").classList.add("hidden");
     $("#paso-fin").classList.remove("hidden");
     if (calif && calif.guiaI && (calif.requiereCanalizacion || calif.sugerirSeguimiento)) {
