@@ -113,9 +113,20 @@ h3{font-size:1rem;font-weight:600;color:var(--brand);margin:26px 0 6px}
   display:flex;gap:12px;font-size:.88rem;color:#40435c;
 }
 .nota-conf svg{flex:0 0 22px;color:var(--brand)}
-.metrics{display:flex;justify-content:center;gap:26px;flex-wrap:wrap;margin-bottom:28px}
+.metrics{display:flex;justify-content:center;gap:26px;flex-wrap:wrap;margin-bottom:24px}
 .metrics div{font-size:.82rem;color:var(--ink-soft)}
 .metrics b{display:block;font-family:var(--font-display);font-size:1.35rem;color:var(--brand);font-weight:600}
+.instrucciones{text-align:left;max-width:520px;margin:0 auto 26px;border:1px solid var(--line);border-radius:var(--radio-sm);padding:16px 20px;background:#fff}
+.instrucciones h3{margin:0 0 8px;font-size:.92rem}
+.instrucciones ul{margin:0;padding-left:20px;font-size:.88rem;color:#40435c}
+.instrucciones li{margin:5px 0}
+.instrucciones .resp-linea{font-size:.8rem;color:var(--ink-soft);margin:12px 0 0;padding-top:10px;border-top:1px solid var(--line)}
+.acciones{display:flex;gap:12px;margin-top:22px}
+.acciones .btn{flex:1}
+.acciones .btn.ghost{flex:0 0 auto}
+.difusion{margin-top:22px;font-size:.82rem;color:var(--ink-soft);text-align:center}
+.difusion p{margin:6px 0}
+.sec.hidden{display:none}
 
 /* ---------- forms ---------- */
 label{display:block;font-weight:600;font-size:.86rem;margin:16px 0 6px;color:#33374d}
@@ -364,6 +375,7 @@ canvas{max-width:100%}
     <div class="card">
       <h2 id="tit-resumen">Resumen</h2>
       <div class="kpis" id="kpis"></div>
+      <div class="aviso warn hidden" id="aviso-examenes" style="margin-top:16px"></div>
     </div>
 
     <div class="tabs no-print" id="tabs">
@@ -395,9 +407,9 @@ canvas{max-width:100%}
 
     <div id="t-guia1" class="hidden">
       <div class="card">
-        <h3 style="margin-top:0">Guía I — Acontecimientos traumáticos severos</h3>
+        <h3 style="margin-top:0">Guía I — Resultados (Anexo A · ITC-PRC-A-004)</h3>
         <div class="kpis" id="kpis-g1" style="margin-bottom:16px"></div>
-        <p class="muted">Personal que reporta requerir canalización o seguimiento. Usar junto con la Carta de Canalización ITC-FMT-A-004-04.</p>
+        <p class="muted">Requiere valoración clínica cuando hubo acontecimiento traumático (Sección I = OK) y se cumple <b>cualquiera</b>: Sección II ≥ 1, Sección III ≥ 3 o Sección IV ≥ 2. Para cada caso, el botón <b>Generar carta</b> produce la Carta de Canalización ITC-FMT-A-004-04 lista para imprimir.</p>
         <div class="tbl-wrap"><table id="tbl-g1"></table></div>
       </div>
     </div>
@@ -447,7 +459,36 @@ window.APP_CONFIG = {
   GUIAS_DISPONIBLES: ["I", "II", "III"],
 
   /* Sugerencias de área para autocompletar. */
-  AREAS_SUGERIDAS: ["Administración", "Sistemas", "Operaciones", "Ventas", "Contabilidad", "Recursos Humanos", "Almacén", "Ingeniería", "Dirección"]
+  AREAS_SUGERIDAS: ["Administración", "Sistemas", "Operaciones", "Ventas", "Contabilidad", "Recursos Humanos", "Almacén", "Ingeniería", "Seguridad e Higiene", "Dirección"],
+
+  /* ------- Datos exigidos por el procedimiento ITC-PRC-A-004 ------- */
+
+  /* §11 — Responsable de la evaluación. Aparece en la portada del cuestionario
+     y en el encabezado del reporte PDF del panel.  >>> COMPLETAR <<< */
+  RESPONSABLE_EVALUACION: {
+    nombre: "[COMPLETAR: nombre del responsable]",
+    cargo:  "[COMPLETAR: cargo]"
+  },
+
+  /* §10 / Política ITC-PTC-A-004 pt.4 — Destino de canalización de los
+     trabajadores que requieren valoración clínica (Guía I). La política
+     indica el IMSS; ajusta la unidad/clínica que corresponda. */
+  CANALIZACION: {
+    destino: "Instituto Mexicano del Seguro Social (IMSS)",
+    lugar:   "[COMPLETAR: Unidad de Medicina Familiar / clínica que corresponda]"
+  },
+
+  /* §5.d — Difusión a los trabajadores: contacto para reportar violencia
+     laboral o prácticas contrarias al entorno organizacional favorable. */
+  CONTACTO_RH: {
+    texto:     "Recursos Humanos",
+    correo:    "[COMPLETAR: correo de RH]",
+    extension: ""
+  },
+
+  /* Opcional: enlace a la Política de Prevención de Riesgos Psicosociales
+     publicada (deja "" si no aplica). */
+  POLITICA_URL: ""
 };
 
 </script>
@@ -500,35 +541,36 @@ window.NOM035 = (function () {
         ]
       },
       {
+        // ITC-PRC-A-004 §8: sólo se responde si alguna respuesta de la Sección I fue "Sí".
         titulo: "II.- Recuerdos persistentes sobre el acontecimiento (durante el último mes):",
-        clave: "II",
+        clave: "II", mostrarSi: "ats",
         items: [
-          { n: 7, t: "¿Ha tenido recuerdos recurrentes sobre el acontecimiento que le provocan malestares?" },
-          { n: 8, t: "¿Ha tenido sueños de carácter recurrente sobre el acontecimiento, que le producen malestar?" }
+          { n: 7, t: "¿Ha tenido recuerdos recurrentes sobre el acontecimiento que le provocan malestares?", cond: "ats" },
+          { n: 8, t: "¿Ha tenido sueños de carácter recurrente sobre el acontecimiento, que le producen malestar?", cond: "ats" }
         ]
       },
       {
         titulo: "III.- Esfuerzo por evitar circunstancias parecidas o asociadas al acontecimiento (durante el último mes):",
-        clave: "III",
+        clave: "III", mostrarSi: "ats",
         items: [
-          { n: 9,  t: "¿Se ha esforzado por evitar todo tipo de sentimientos, conversaciones o situaciones que le puedan recordar el acontecimiento?" },
-          { n: 10, t: "¿Se ha esforzado por evitar todo tipo de actividades, lugares o personas que motivan recuerdos del acontecimiento?" },
-          { n: 11, t: "¿Ha tenido dificultad para recordar alguna parte importante del evento?" },
-          { n: 12, t: "¿Ha disminuido su interés en sus actividades cotidianas?" },
-          { n: 13, t: "¿Se ha sentido usted alejado o distante de los demás?" },
-          { n: 14, t: "¿Ha notado que tiene dificultad para expresar sus sentimientos?" },
-          { n: 15, t: "¿Ha tenido la impresión de que su vida se va a acortar, que va a morir antes que otras personas o que tiene un futuro limitado?" }
+          { n: 9,  t: "¿Se ha esforzado por evitar todo tipo de sentimientos, conversaciones o situaciones que le puedan recordar el acontecimiento?", cond: "ats" },
+          { n: 10, t: "¿Se ha esforzado por evitar todo tipo de actividades, lugares o personas que motivan recuerdos del acontecimiento?", cond: "ats" },
+          { n: 11, t: "¿Ha tenido dificultad para recordar alguna parte importante del evento?", cond: "ats" },
+          { n: 12, t: "¿Ha disminuido su interés en sus actividades cotidianas?", cond: "ats" },
+          { n: 13, t: "¿Se ha sentido usted alejado o distante de los demás?", cond: "ats" },
+          { n: 14, t: "¿Ha notado que tiene dificultad para expresar sus sentimientos?", cond: "ats" },
+          { n: 15, t: "¿Ha tenido la impresión de que su vida se va a acortar, que va a morir antes que otras personas o que tiene un futuro limitado?", cond: "ats" }
         ]
       },
       {
         titulo: "IV.- Afectación (durante el último mes):",
-        clave: "IV",
+        clave: "IV", mostrarSi: "ats",
         items: [
-          { n: 16, t: "¿Ha tenido usted dificultades para dormir?" },
-          { n: 17, t: "¿Ha estado particularmente irritable o le han dado arranques de coraje?" },
-          { n: 18, t: "¿Ha tenido dificultad para concentrarse?" },
-          { n: 19, t: "¿Ha estado nervioso o constantemente en alerta?" },
-          { n: 20, t: "¿Se ha sobresaltado fácilmente por cualquier cosa?" }
+          { n: 16, t: "¿Ha tenido usted dificultades para dormir?", cond: "ats" },
+          { n: 17, t: "¿Ha estado particularmente irritable o le han dado arranques de coraje?", cond: "ats" },
+          { n: 18, t: "¿Ha tenido dificultad para concentrarse?", cond: "ats" },
+          { n: 19, t: "¿Ha estado nervioso o constantemente en alerta?", cond: "ats" },
+          { n: 20, t: "¿Se ha sobresaltado fácilmente por cualquier cosa?", cond: "ats" }
         ]
       }
     ]
@@ -826,28 +868,34 @@ window.NOM035 = (function () {
     };
   }
 
-  /* Guía I — criterios de canalización (basados en criterios B, C y D del
-   * trastorno de estrés postraumático, DSM). Editable.                    */
+  /* Guía I — Medio de calificación conforme a ITC-PRC-A-004 §8 y NOM-035 (Guía de Referencia I):
+   *  1) Si TODAS las respuestas de la Sección I son "No"  -> no requiere valoración clínica
+   *     (no es necesario responder las Secciones II, III y IV).
+   *  2) Si ALGUNA respuesta de la Sección I es "Sí"       -> se responden II, III y IV.
+   *  3) Requiere valoración clínica si, habiendo "Sí" en la Sección I, se cumple CUALQUIERA:
+   *       - Sección II (Recuerdos persistentes): "Sí" en 1 o más preguntas
+   *       - Sección III (Esfuerzo por evitar):   "Sí" en 3 o más preguntas
+   *       - Sección IV (Afectación):             "Sí" en 2 o más preguntas
+   */
   const GUIA_I_REGLA = { reexperimentacion: 1, evitacion: 3, afectacion: 2 };
   function evaluarGuiaI(respuestas) {
-    // respuestas: { n: "Sí"|"No" }  (n 1..20)
     const si = n => respuestas[n] === "Sí" || respuestas[n] === "SI" || respuestas[n] === "Si";
     const eventoTraumatico = [1, 2, 3, 4, 5, 6].some(si);
-    const reexp   = [7, 8].filter(si).length;
-    const evita   = [9, 10, 11, 12, 13, 14, 15].filter(si).length;
-    const afecta  = [16, 17, 18, 19, 20].filter(si).length;
-    const cumpleCriterios =
-      reexp  >= GUIA_I_REGLA.reexperimentacion &&
-      evita  >= GUIA_I_REGLA.evitacion &&
-      afecta >= GUIA_I_REGLA.afectacion;
-    const requiereCanalizacion = eventoTraumatico && cumpleCriterios;
+    const reexp  = [7, 8].filter(si).length;
+    const evita  = [9, 10, 11, 12, 13, 14, 15].filter(si).length;
+    const afecta = [16, 17, 18, 19, 20].filter(si).length;
+    const critII  = reexp  >= GUIA_I_REGLA.reexperimentacion;
+    const critIII = evita  >= GUIA_I_REGLA.evitacion;
+    const critIV  = afecta >= GUIA_I_REGLA.afectacion;
+    const requiereValoracion = eventoTraumatico && (critII || critIII || critIV);
     return {
       guiaI: true,
       eventoTraumatico,
       conteos: { reexperimentacion: reexp, evitacion: evita, afectacion: afecta },
-      requiereCanalizacion,
-      // Si vivió un evento traumático pero no cumple todos los criterios, igual se sugiere seguimiento.
-      sugerirSeguimiento: eventoTraumatico && !requiereCanalizacion
+      criterios: { II: critII, III: critIII, IV: critIV },
+      requiereValoracion,
+      requiereCanalizacion: requiereValoracion,          // alias de compatibilidad
+      resultado: requiereValoracion ? "Requiere valoración clínica" : "No requiere valoración clínica"
     };
   }
 
@@ -870,6 +918,11 @@ window.NOM035 = (function () {
   const NIVEL_CLASE = { "Nulo o despreciable": "n-nulo", "Bajo": "n-bajo", "Medio": "n-medio", "Alto": "n-alto", "Muy alto": "n-muy" };
   const PALETA = ["#3f9e6b", "#8bbf3f", "#efb742", "#e8743b", "#d6392b"];
   const BRAND = "#020096";
+  const BRAND_LOGO = (() => {
+    const s = document.querySelector(".brand-logo");
+    const m = s && (getComputedStyle(s).backgroundImage || "").match(/url\(["']?(data:image\/[^"')]+)/);
+    return m ? m[1] : "";
+  })();
 
   let TOKEN = sessionStorage.getItem("nom035_token") || "";
   let DATA = null;          // respuesta completa del API
@@ -981,13 +1034,17 @@ window.NOM035 = (function () {
 
   function llenarPrintSub(rows, fg) {
     const fc = $("#f-campana").value || "Todas", fa = $("#f-area").value || "Todas";
+    const rsp = cfg.RESPONSABLE_EVALUACION || {};
+    const resp = (rsp.nombre || "—") + (rsp.cargo ? " · " + rsp.cargo : "");
     $("#print-sub").innerHTML =
       `<span><b>Centro:</b> ${cfg.CENTRO || "—"}</span>` +
       `<span><b>Campaña:</b> ${fc}</span>` +
       `<span><b>Cuestionario:</b> ${fg || "General"}</span>` +
       `<span><b>Área:</b> ${fa}</span>` +
       `<span><b>Respuestas:</b> ${rows.length}</span>` +
-      `<span><b>Emitido:</b> ${new Date().toLocaleString()}</span>`;
+      `<span><b>Emitido:</b> ${new Date().toLocaleString()}</span>` +
+      `<span><b>Responsable de la evaluación:</b> ${resp}</span>` +
+      `<span><b>Referencia:</b> NOM-035-STPS-2018 · ITC-PRC-A-004</span>`;
   }
 
   function imprimir() {
@@ -1013,17 +1070,31 @@ window.NOM035 = (function () {
   function kpis(rows) {
     const frec = soloFrec(rows);
     const prom = frec.length ? (frec.reduce((a, r) => a + (r.resultado.total || 0), 0) / frec.length) : 0;
-    const conCanal = rows.filter(r => r.resultado && r.resultado.guiaI && r.resultado.requiereCanalizacion).length;
+    const conCanal = rows.filter(r => r.resultado && r.resultado.guiaI && r.resultado.requiereValoracion).length;
     const g1 = rows.filter(r => r["Guía"] === "Guía I").length;
+    const altos = frec.filter(r => /Alto/.test(r.resultado.nivel)).length;
     const k = [
       ["Respuestas", rows.length, "en el filtro actual"],
       ["Guía I", g1, "acont. traumáticos"],
       ["Guías II/III", frec.length, "cuestionarios de riesgo"],
       ["Puntaje promedio", frec.length ? prom.toFixed(1) : "—", "Guías II/III"],
-      ["Riesgo Alto/Muy alto", frec.filter(r => /Alto/.test(r.resultado.nivel)).length, "personas"],
-      ["Requieren canalización", conCanal, "Guía I"]
+      ["Riesgo Alto/Muy alto", altos, "personas"],
+      ["Requieren valoración clínica", conCanal, "Guía I"]
     ];
     $("#kpis").innerHTML = k.map(x => `<div class="kpi"><b>${x[1]}</b><small>${x[0]}<br>${x[2]}</small></div>`).join("");
+
+    // ITC-PTC-A-004 pt.5 / ITC-PRC-A-004: cuando los resultados sugieren exámenes o
+    // evaluaciones psicológicas para el personal expuesto.
+    const aviso = $("#aviso-examenes");
+    if (aviso) {
+      const sugerir = altos > 0 || conCanal > 0;
+      aviso.classList.toggle("hidden", !sugerir);
+      if (sugerir) aviso.innerHTML =
+        "<b>Acción sugerida.</b> Hay personal con nivel de riesgo Alto/Muy alto" +
+        (conCanal ? " o que requiere valoración clínica (Guía I)" : "") +
+        ". Conforme a la Política ITC-PTC-A-004 (pt. 5) y a la NOM-035, evalúa la práctica de " +
+        "exámenes y/o evaluaciones psicológicas al personal expuesto y define medidas de control.";
+    }
   }
 
   /* ---- gráficas ---- */
@@ -1154,7 +1225,7 @@ window.NOM035 = (function () {
     html += rows.slice().reverse().map(r => {
       const res = r.resultado || {};
       const puntaje = res.total !== undefined ? res.total : (res.guiaI ? "—" : "");
-      const nivel = res.nivel || (res.guiaI ? (res.requiereCanalizacion ? "Canalización" : (res.sugerirSeguimiento ? "Seguimiento" : "Sin indicador")) : "");
+      const nivel = res.nivel || (res.guiaI ? (res.requiereValoracion ? "Requiere valoración clínica" : "No requiere valoración clínica") : "");
       return `<tr><td>${fFecha(r["Marca temporal"])}</td><td>${r["Guía"]}</td><td>${r["Nombre"] || "<i>(anónimo)</i>"}</td>` +
         `<td>${r["Área"] || ""}</td><td>${r["Puesto"] || ""}</td><td>${puntaje}</td><td>${res.nivel ? chip(nivel) : nivel}</td>` +
         `<td>${r["Tiene comentarios"] === "Sí" ? "Sí" : ""}</td></tr>`;
@@ -1162,25 +1233,97 @@ window.NOM035 = (function () {
     $("#tbl-individual").innerHTML = html;
   }
 
-  /* ---- Guía I ---- */
+  /* ---- Guía I — Resultados (formato Anexo A de ITC-PRC-A-004) ---- */
+  let G1_ROWS = [];
   function guiaUno(rows) {
     const g1 = rows.filter(r => r["Guía"] === "Guía I" && r.resultado);
-    const canal = g1.filter(r => r.resultado.requiereCanalizacion);
-    const seg = g1.filter(r => r.resultado.sugerirSeguimiento);
+    G1_ROWS = g1.slice();
+    const requiere = g1.filter(r => r.resultado.requiereValoracion);
     const evento = g1.filter(r => r.resultado.eventoTraumatico);
     $("#kpis-g1").innerHTML = [
-      ["Respuestas Guía I", g1.length], ["Reportan evento traumático", evento.length],
-      ["Requieren canalización", canal.length], ["Sugieren seguimiento", seg.length]
+      ["Respuestas Guía I", g1.length],
+      ["Reportan acontecimiento traumático", evento.length],
+      ["Requieren valoración clínica", requiere.length],
+      ["No requieren valoración", g1.length - requiere.length]
     ].map(x => `<div class="kpi"><b>${x[1]}</b><small>${x[0]}</small></div>`).join("");
-    let html = "<tr><th>Fecha</th><th>Nombre</th><th>Área</th><th>Puesto</th><th>Evento</th><th>Reexp.</th><th>Evitación</th><th>Afectación</th><th>Indicador</th></tr>";
-    html += g1.filter(r => r.resultado.requiereCanalizacion || r.resultado.sugerirSeguimiento).slice().reverse().map(r => {
-      const x = r.resultado, c = x.conteos || {};
-      return `<tr><td>${fFecha(r["Marca temporal"])}</td><td>${r["Nombre"] || "<i>(anónimo)</i>"}</td><td>${r["Área"] || ""}</td><td>${r["Puesto"] || ""}</td>` +
-        `<td>${x.eventoTraumatico ? "Sí" : "No"}</td><td>${c.reexperimentacion}</td><td>${c.evitacion}</td><td>${c.afectacion}</td>` +
-        `<td>${x.requiereCanalizacion ? '<span class="chip n-muy">Canalización</span>' : '<span class="chip n-medio">Seguimiento</span>'}</td></tr>`;
+
+    const ok = b => b ? '<b style="color:var(--brand)">OK</b>' : '<span class="muted">NA</span>';
+    let html = "<tr><th>#</th><th>Nombre del evaluado</th><th>Área</th><th>Fecha</th>" +
+      "<th title='Sección I: acontecimiento traumático'>I</th>" +
+      "<th title='Sección II: recuerdos persistentes (≥1)'>II</th>" +
+      "<th title='Sección III: esfuerzo por evitar (≥3)'>III</th>" +
+      "<th title='Sección IV: afectación (≥2)'>IV</th>" +
+      "<th>Resultado</th><th class='no-print'>Carta</th></tr>";
+    html += g1.slice().reverse().map((r, i) => {
+      const x = r.resultado, cr = x.criterios || {};
+      const req = x.requiereValoracion;
+      const idx = g1.length - i;
+      return `<tr><td>${idx}</td><td>${r["Nombre"] || "<i>(anónimo)</i>"}</td><td>${r["Área"] || ""}</td>` +
+        `<td>${fFecha(r["Marca temporal"])}</td>` +
+        `<td>${ok(x.eventoTraumatico)}</td><td>${ok(cr.II)}</td><td>${ok(cr.III)}</td><td>${ok(cr.IV)}</td>` +
+        `<td>${req ? '<span class="chip n-muy">Requiere valoración clínica</span>' : '<span class="chip n-nulo">No requiere valoración clínica</span>'}</td>` +
+        `<td class="no-print">${req ? `<button class="btn ghost btn-carta" data-i="${g1.length - 1 - i}" style="padding:5px 12px;font-size:.8rem">Generar carta</button>` : ""}</td></tr>`;
     }).join("");
-    if (!g1.length) html = "<tr><td>Sin respuestas de Guía I en el filtro.</td></tr>";
+    if (!g1.length) html = "<tr><td colspan='10'>Sin respuestas de Guía I en el filtro.</td></tr>";
     $("#tbl-g1").innerHTML = html;
+    $$("#tbl-g1 .btn-carta").forEach(b => b.onclick = () => generarCarta(G1_ROWS[+b.dataset.i]));
+  }
+
+  /* ---- Carta de Canalización ITC-FMT-A-004-04 ---- */
+  function generarCarta(r) {
+    const can = cfg.CANALIZACION || {};
+    const rsp = cfg.RESPONSABLE_EVALUACION || {};
+    const hoy = new Date();
+    const meses = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
+    const fecha = `${cfg.CENTRO || "____________________"}, ${hoy.getDate()} de ${meses[hoy.getMonth()]} del ${hoy.getFullYear()}`;
+    const nombre = r["Nombre"] || "____________________________________";
+    const destino = [can.destino, can.lugar].filter(Boolean).join(" — ") || "____________________________________";
+    const w = window.open("", "_blank");
+    if (!w) { alert("Permite las ventanas emergentes para generar la carta."); return; }
+    w.document.write(`<!DOCTYPE html><html lang="es"><head><meta charset="utf-8">
+<title>Carta de Canalización — ${escapar(nombre)}</title>
+<style>
+  @page{size:A4;margin:24mm 22mm}
+  body{font:12pt/1.6 "Times New Roman",Georgia,serif;color:#111;max-width:720px;margin:0 auto;padding:20px}
+  .hd{display:flex;align-items:center;gap:16px;border-bottom:2px solid #020096;padding-bottom:10px;margin-bottom:6px}
+  .hd img{height:44px}
+  .hd .r{font-family:Arial,sans-serif;font-size:8.5pt;color:#444;text-align:right;flex:1}
+  .doc{font-family:Arial,sans-serif;font-size:8.5pt;color:#666;text-align:right;margin-bottom:22px}
+  .fr{margin:22px 0 6px}
+  .campo{margin:2px 0}
+  p{text-align:justify;margin:12px 0}
+  .firma{margin-top:46px}
+  .no-print{margin:18px 0;text-align:center}
+  @media print{.no-print{display:none}}
+</style></head><body>
+<div class="hd"><img src="${BRAND_LOGO}" alt="In Time Control"><div class="r">In Time Control<br>NOM-035-STPS-2018</div></div>
+<div class="doc">ITC-FMT-A-004-04 · Carta de Canalización · Rev. 01</div>
+<p class="fr">${fecha}</p>
+<p><b>Estimado(a) colaborador(a)</b></p>
+<div class="campo">Nombre: ${escapar(nombre)}</div>
+<div class="campo">NSS: (Opcional) ______________________</div>
+<div class="campo">Registro patronal: (Opcional) ______________________</div>
+<p><b>Presente</b></p>
+<p>Derivado de la aplicación del cuestionario señalado en la &ldquo;Guía de Referencia I&rdquo; en
+cumplimiento de la NOM-035, hemos detectado que tus respuestas de dicho cuestionario deben ser
+valoradas por un especialista a fin de descartar cualquier tipo de alteraciones a tu salud, o bien
+que hayas sido sujeto a algún acontecimiento traumático severo o factor de riesgo psicosocial, por
+lo que te recomendamos e invitamos a que acudas a <b>${escapar(destino)}</b>, para que puedan
+brindarte una mejor atención.</p>
+<p>Una vez que cuentes con los resultados de tu valoración, te pedimos que los compartas con
+Recursos Humanos y así estaremos ciertos de tu situación de salud física y emocional, y podremos
+brindarte lo necesario para evitar cualquier riesgo a tu salud integral.</p>
+<p>La cultura del cumplimiento la construimos todos; en In Time Control seguimos comprometidos con
+el bienestar y la salud de nuestro talento.</p>
+<p>¡Gracias por tu compromiso!</p>
+<p>Saludos,</p>
+<div class="firma">
+  <p>_________________________________<br>
+  Recursos Humanos${rsp.nombre && rsp.nombre.indexOf("[") === -1 ? "<br>Responsable de la evaluación: " + escapar(rsp.nombre) + (rsp.cargo ? " (" + escapar(rsp.cargo) + ")" : "") : ""}</p>
+</div>
+<div class="no-print"><button onclick="window.print()">Imprimir / Guardar PDF</button></div>
+</body></html>`);
+    w.document.close();
   }
 
   /* ---- comentarios ---- */
@@ -1226,8 +1369,11 @@ window.NOM035 = (function () {
         Sexo: r["Sexo"] || "", Antigüedad: r["Antigüedad"] || "", "Tipo personal": r["Tipo personal"] || "",
         "Puntaje total": res.total !== undefined ? res.total : "",
         "Nivel de riesgo": res.nivel || "",
-        "Evento traumático": res.guiaI ? (res.eventoTraumatico ? "Sí" : "No") : "",
-        "Requiere canalización": res.guiaI ? (res.requiereCanalizacion ? "Sí" : "No") : "",
+        "Guía I: acontecimiento": res.guiaI ? (res.eventoTraumatico ? "OK" : "NA") : "",
+        "Guía I: Sec. II": res.guiaI ? (res.criterios && res.criterios.II ? "OK" : "NA") : "",
+        "Guía I: Sec. III": res.guiaI ? (res.criterios && res.criterios.III ? "OK" : "NA") : "",
+        "Guía I: Sec. IV": res.guiaI ? (res.criterios && res.criterios.IV ? "OK" : "NA") : "",
+        "Guía I: resultado": res.guiaI ? (res.requiereValoracion ? "Requiere valoración clínica" : "No requiere valoración clínica") : "",
         Comentarios: r["Tiene comentarios"] === "Sí" ? "Sí" : ""
       };
       const dom = res.dominios || {};
@@ -1235,6 +1381,17 @@ window.NOM035 = (function () {
       return base;
     });
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(plano), "Respuestas");
+    // Anexo A (Guía I)
+    const anexoA = rows.filter(r => r["Guía"] === "Guía I" && r.resultado).map((r, i) => {
+      const x = r.resultado, cr = x.criterios || {};
+      return {
+        "#": i + 1, "Nombre del evaluado": r["Nombre"] || "(anónimo)", "Área": r["Área"] || "",
+        Fecha: fFecha(r["Marca temporal"]),
+        I: x.eventoTraumatico ? "OK" : "NA", II: cr.II ? "OK" : "NA", III: cr.III ? "OK" : "NA", IV: cr.IV ? "OK" : "NA",
+        Resultado: x.requiereValoracion ? "Requiere valoración clínica" : "No requiere valoración clínica"
+      };
+    });
+    if (anexoA.length) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(anexoA), "Anexo A - Guía I");
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(coms.map(c => ({
       Fecha: fFecha(c["Marca temporal"]), Campaña: c["Campaña"], Guía: c["Guía"], Área: c["Área"] || "",
       Puesto: c["Puesto"] || "", Nombre: c["Nombre"] || "", Comentario: c["Comentario"] || ""
