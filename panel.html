@@ -531,13 +531,14 @@ window.APP_CONFIG = {
   GUIAS_DISPONIBLES: ["I", "II", "III"],
 
   /* Proyectos que aparecen en la lista "Proyecto" de la ficha de datos.
-   * Formato del proyecto:  ID - Nombre (Ubicación)   ej.  P2502 - Proyecto vikingo 2.0 (Zitácuaro Michoacán)
+   * Formato del proyecto:  ID - Nombre (Ubicación)  (el ID es una letra + 3 a 5 dígitos: P2502, G1301…)   ej.  P2502 - Proyecto vikingo 2.0 (Zitácuaro Michoacán)
    * Para agregar uno, añade una línea { id, nombre, lugar }. Además la lista incluye la opción
    * "Otro proyecto" donde se captura ese mismo formato; los que se capturen así aparecen solos en el
    * filtro del panel (y se pueden pasar aquí para que salgan en la lista). */
   PROYECTOS: [
     { id: "P2502", nombre: "Proyecto vikingo 2.0", lugar: "Zitácuaro Michoacán" },
-    { id: "P2601", nombre: "Mayakan", lugar: "Reforma, Chiapas" }
+    { id: "P2601", nombre: "Mayakan", lugar: "Reforma, Chiapas" },
+    { id: "G1301", nombre: "Oficina Matriz", lugar: "" }
   ],
 
   /* Sugerencias de área para autocompletar. */
