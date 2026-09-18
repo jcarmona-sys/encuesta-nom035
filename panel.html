@@ -416,6 +416,7 @@ canvas{max-width:100%}
     <div class="card no-print">
       <div class="toolbar">
         <div class="fld"><label>Campaña</label><select id="f-campana"></select></div>
+        <div class="fld"><label>Proyecto</label><select id="f-proyecto"><option value="">Todos los proyectos</option></select></div>
         <div class="fld"><label>Cuestionario</label>
           <select id="f-guia">
             <option value="">General (todos)</option>
@@ -440,7 +441,7 @@ canvas{max-width:100%}
 
     <div class="tabs no-print" id="tabs">
       <button data-t="graficas" class="act">Gráficas</button>
-      <button data-t="concentrado">Concentrado por área</button>
+      <button data-t="concentrado">Concentrados</button>
       <button data-t="individual">Detalle individual</button>
       <button data-t="guia1">Guía I / Canalización</button>
       <button data-t="comentarios">Comentarios</button>
@@ -457,6 +458,7 @@ canvas{max-width:100%}
     </div>
 
     <div id="t-concentrado" class="hidden">
+      <div class="card"><h3 style="margin-top:0">Concentrado por proyecto</h3><div class="tbl-wrap"><table id="tbl-proyectos"></table></div></div>
       <div class="card"><h3 style="margin-top:0">Concentrado por área</h3><div class="tbl-wrap"><table id="tbl-concentrado"></table></div></div>
       <div class="card"><h3 style="margin-top:0">Concentrado por dominio</h3><div class="tbl-wrap"><table id="tbl-dominios"></table></div></div>
     </div>
@@ -527,6 +529,15 @@ window.APP_CONFIG = {
 
   /* Qué guías se muestran al trabajador. */
   GUIAS_DISPONIBLES: ["I", "II", "III"],
+
+  /* Proyectos que aparecen en la lista "Proyecto" de la ficha de datos.
+   * Formato del proyecto:  ID - Nombre (Ubicación)   ej.  P2502 - Proyecto vikingo 2.0 (Zitácuaro Michoacán)
+   * Para agregar uno, añade una línea { id, nombre, lugar }. Además la lista incluye la opción
+   * "Otro proyecto" donde se captura ese mismo formato; los que se capturen así aparecen solos en el
+   * filtro del panel (y se pueden pasar aquí para que salgan en la lista). */
+  PROYECTOS: [
+    { id: "P2502", nombre: "Proyecto vikingo 2.0", lugar: "Zitácuaro Michoacán" }
+  ],
 
   /* Sugerencias de área para autocompletar. */
   AREAS_SUGERIDAS: ["Administración", "Sistemas", "Operaciones", "Ventas", "Contabilidad", "Recursos Humanos", "Almacén", "Ingeniería", "Seguridad e Higiene", "Dirección"],
@@ -1053,6 +1064,24 @@ window.NOM035 = (function () {
       .finally(() => { if (btn) { btn.disabled = false; btn.textContent = "Entrar"; } });
   }
 
+  /* ---- proyecto ----
+   * Cada fila trae "Proyecto ID" / "Proyecto". Las respuestas de la campaña 2026 capturadas antes de
+   * existir el campo pertenecen a P2502 (mismo criterio que migrarProyectos() en el backend); el resto
+   * sin proyecto (p. ej. datos DEMO) se agrupa como "Sin proyecto". */
+  const PROY_2026 = { id: "P2502", nombre: "Proyecto vikingo 2.0 (Zitácuaro Michoacán)" };
+  const SIN_PROY = { id: "SIN-PROY", nombre: "Sin proyecto" };
+  function proyectoDe(r) {
+    const id = String(r["Proyecto ID"] || "").trim().toUpperCase();
+    if (id) {
+      const cf = (cfg.PROYECTOS || []).find(p => p.id.toUpperCase() === id);
+      const nom = String(r["Proyecto"] || "").trim() || (cf ? cf.nombre + (cf.lugar ? " (" + cf.lugar + ")" : "") : "");
+      return { id, nombre: nom };
+    }
+    if (String(r["Campaña"]) === "2026") return PROY_2026;
+    return SIN_PROY;
+  }
+  const etiquetaProy = p => p.id === SIN_PROY.id ? SIN_PROY.nombre : (p.nombre ? p.id + " - " + p.nombre : p.id);
+
   function prepararFiltros() {
     const camp = $("#f-campana");
     const campanas = (DATA.campanas && DATA.campanas.length ? DATA.campanas : [cfg.CAMPANA]).slice().sort();
@@ -1063,7 +1092,13 @@ window.NOM035 = (function () {
     const areas = [...new Set(DATA.respuestas.map(r => (r["Área"] || "").trim()).filter(Boolean))].sort();
     $("#f-area").innerHTML = '<option value="">Todas</option>' + areas.map(a => `<option>${a}</option>`).join("");
 
-    $$("#f-campana,#f-guia,#f-area").forEach(s => s.onchange = render);
+    const proys = {};
+    (cfg.PROYECTOS || []).forEach(x => { proys[x.id.toUpperCase()] = { id: x.id.toUpperCase(), nombre: x.nombre + (x.lugar ? " (" + x.lugar + ")" : "") }; });
+    DATA.respuestas.forEach(r => { const x = proyectoDe(r); if (!proys[x.id] || !proys[x.id].nombre) proys[x.id] = x; });
+    $("#f-proyecto").innerHTML = '<option value="">Todos los proyectos</option>' +
+      Object.values(proys).sort((a, b) => a.id.localeCompare(b.id)).map(x => `<option value="${escapar(x.id)}">${escapar(etiquetaProy(x))}</option>`).join("");
+
+    $$("#f-campana,#f-guia,#f-area,#f-proyecto").forEach(s => s.onchange = render);
     $("#btn-recargar").onclick = () => cargar();
     $("#btn-excel").onclick = exportarExcel;
     $("#btn-pdf").onclick = imprimir;
@@ -1083,15 +1118,17 @@ window.NOM035 = (function () {
 
   /* ---- filtrado ---- */
   function filtrar() {
-    const fc = $("#f-campana").value, fg = $("#f-guia").value, fa = $("#f-area").value;
+    const fc = $("#f-campana").value, fg = $("#f-guia").value, fa = $("#f-area").value, fp = $("#f-proyecto").value;
     const rows = DATA.respuestas.filter(r =>
       (!fc || String(r["Campaña"]) === fc) &&
       (!fg || r["Guía"] === fg) &&
-      (!fa || (r["Área"] || "").trim() === fa));
+      (!fa || (r["Área"] || "").trim() === fa) &&
+      (!fp || proyectoDe(r).id === fp));
     const coms = DATA.comentarios.filter(c =>
       (!fc || String(c["Campaña"]) === fc) &&
       (!fg || c["Guía"] === fg) &&
-      (!fa || (c["Área"] || "").trim() === fa));
+      (!fa || (c["Área"] || "").trim() === fa) &&
+      (!fp || proyectoDe(c).id === fp));
     return { rows, coms, fg };
   }
 
@@ -1104,6 +1141,7 @@ window.NOM035 = (function () {
     graficaAreas(rows);
     graficaDominios(rows);
     graficaItems(rows, fg);
+    concentradoProyecto(rows);
     concentradoArea(rows);
     concentradoDominio(rows);
     tablaIndividual(rows);
@@ -1115,13 +1153,15 @@ window.NOM035 = (function () {
 
   function llenarPrintSub(rows, fg) {
     const fc = $("#f-campana").value || "Todas", fa = $("#f-area").value || "Todas";
+    const fpSel = $("#f-proyecto").selectedOptions[0], fp = fpSel && fpSel.value ? fpSel.textContent : "Todos";
     const rsp = cfg.RESPONSABLE_EVALUACION || {};
     const resp = (rsp.nombre || "—") + (rsp.cargo ? " · " + rsp.cargo : "");
     $("#print-sub").innerHTML =
       `<span><b>Centro:</b> ${cfg.CENTRO || "—"}</span>` +
       `<span><b>Campaña:</b> ${fc}</span>` +
       `<span><b>Cuestionario:</b> ${fg || "General"}</span>` +
-      `<span><b>Área:</b> ${fa}</span>` +
+      `<span><b>Proyecto:</b> ${escapar(fp)}</span>` +
+      `<span><b>Área:</b> ${escapar(fa)}</span>` +
       `<span><b>Respuestas:</b> ${rows.length}</span>` +
       `<span><b>Emitido:</b> ${new Date().toLocaleString()}</span>` +
       `<span><b>Responsable de la evaluación:</b> ${resp}</span>` +
@@ -1260,6 +1300,27 @@ window.NOM035 = (function () {
   }
 
   /* ---- concentrados ---- */
+  function concentradoProyecto(rows) {
+    const porP = {};
+    rows.forEach(r => { const x = proyectoDe(r); (porP[x.id] = porP[x.id] || { p: x, rows: [] }).rows.push(r); });
+    let html = "<tr><th>Proyecto</th><th>Respuestas</th><th>Guía I</th><th>Guías II/III</th><th>Riesgo prom. (0-4)</th><th>Nivel predominante</th>" +
+      N.NIVELES.map(nv => `<th>${nv}</th>`).join("") + "<th>Req. valoración (G-I)</th></tr>";
+    html += Object.values(porP).sort((a, b) => a.p.id.localeCompare(b.p.id)).map(({ p, rows: g }) => {
+      const frec = soloFrec(g);
+      const prom = promedio(frec.map(promRiesgo).filter(v => v != null));
+      const conteo = {};
+      frec.forEach(r => { conteo[r.resultado.nivel] = (conteo[r.resultado.nivel] || 0) + 1; });
+      const pred = Object.keys(conteo).sort((x, y) => conteo[y] - conteo[x])[0];
+      const dist = N.NIVELES.map(nv => frec.filter(r => r.resultado.nivel === nv).length);
+      const req = g.filter(r => r.resultado && r.resultado.guiaI && r.resultado.requiereValoracion).length;
+      return `<tr><td>${escapar(etiquetaProy(p))}</td><td>${g.length}</td><td>${g.filter(r => r["Guía"] === "Guía I").length}</td><td>${frec.length}</td>` +
+        `<td>${prom != null ? prom.toFixed(2) : "—"}</td><td>${pred ? chip(pred) : "—"}</td>` +
+        dist.map(d => `<td>${d || ""}</td>`).join("") + `<td>${req || ""}</td></tr>`;
+    }).join("");
+    if (!rows.length) html = "<tr><td>Sin datos en el filtro.</td></tr>";
+    $("#tbl-proyectos").innerHTML = html;
+  }
+
   function concentradoArea(rows) {
     const frec = soloFrec(rows);
     const areas = {};
@@ -1315,13 +1376,13 @@ window.NOM035 = (function () {
   /* ---- detalle individual ---- */
   function tablaIndividual(rows) {
     $("#n-ind").textContent = rows.length;
-    let html = "<tr><th>Fecha</th><th>Guía</th><th>Nombre</th><th>Área</th><th>Puesto</th><th>Puntaje</th><th>Nivel</th><th>Coment.</th></tr>";
+    let html = "<tr><th>Fecha</th><th>Guía</th><th>Nombre</th><th>Proyecto</th><th>Área</th><th>Puesto</th><th>Puntaje</th><th>Nivel</th><th>Coment.</th></tr>";
     html += rows.slice().reverse().map(r => {
       const res = r.resultado || {};
       const puntaje = res.total !== undefined ? res.total : (res.guiaI ? "—" : "");
       const nivel = res.nivel || (res.guiaI ? (res.requiereValoracion ? "Requiere valoración clínica" : "No requiere valoración clínica") : "");
-      return `<tr><td>${fFecha(r["Marca temporal"])}</td><td>${r["Guía"]}</td><td>${r["Nombre"] || "<i>(anónimo)</i>"}</td>` +
-        `<td>${r["Área"] || ""}</td><td>${r["Puesto"] || ""}</td><td>${puntaje}</td><td>${res.nivel ? chip(nivel) : nivel}</td>` +
+      return `<tr><td>${fFecha(r["Marca temporal"])}</td><td>${r["Guía"]}</td><td>${r["Nombre"] ? escapar(r["Nombre"]) : "<i>(sin nombre)</i>"}</td>` +
+        `<td>${escapar(proyectoDe(r).id)}</td><td>${escapar(r["Área"] || "")}</td><td>${escapar(r["Puesto"] || "")}</td><td>${puntaje}</td><td>${res.nivel ? chip(nivel) : nivel}</td>` +
         `<td>${r["Tiene comentarios"] === "Sí" ? "Sí" : ""}</td></tr>`;
     }).join("");
     $("#tbl-individual").innerHTML = html;
@@ -1351,7 +1412,7 @@ window.NOM035 = (function () {
       return true;
     });
     const ok = b => b ? '<b style="color:var(--brand)">OK</b>' : '<span class="muted">NA</span>';
-    let html = "<tr><th>#</th><th>Nombre del evaluado</th><th>Área</th><th>Fecha</th>" +
+    let html = "<tr><th>#</th><th>Nombre del evaluado</th><th>Proyecto</th><th>Área</th><th>Fecha</th>" +
       "<th title='Sección I: acontecimiento traumático'>I</th>" +
       "<th title='Sección II: recuerdos persistentes (≥1)'>II</th>" +
       "<th title='Sección III: esfuerzo por evitar (≥3)'>III</th>" +
@@ -1361,13 +1422,13 @@ window.NOM035 = (function () {
       const x = r.resultado, cr = x.criterios || {};
       const req = x.requiereValoracion;
       const idx = g1.length - i;
-      return `<tr><td>${idx}</td><td>${r["Nombre"] || "<i>(anónimo)</i>"}</td><td>${r["Área"] || ""}</td>` +
+      return `<tr><td>${idx}</td><td>${r["Nombre"] ? escapar(r["Nombre"]) : "<i>(sin nombre)</i>"}</td><td>${escapar(proyectoDe(r).id)}</td><td>${escapar(r["Área"] || "")}</td>` +
         `<td>${fFecha(r["Marca temporal"])}</td>` +
         `<td>${ok(x.eventoTraumatico)}</td><td>${ok(cr.II)}</td><td>${ok(cr.III)}</td><td>${ok(cr.IV)}</td>` +
         `<td>${req ? '<span class="chip n-muy">Requiere valoración clínica</span>' : '<span class="chip n-nulo">No requiere valoración clínica</span>'}</td>` +
         `<td class="no-print">${req ? `<button class="btn ghost btn-carta" data-id="${r["ID"] || ""}" style="padding:5px 12px;font-size:.8rem">Generar carta</button>` : ""}</td></tr>`;
     }).join("");
-    if (!g1.length) html = `<tr><td colspan='10'>${G1_ROWS.length ? "Ningún registro coincide con este filtro." : "Sin respuestas de Guía I en el filtro."}</td></tr>`;
+    if (!g1.length) html = `<tr><td colspan='11'>${G1_ROWS.length ? "Ningún registro coincide con este filtro." : "Sin respuestas de Guía I en el filtro."}</td></tr>`;
     $("#tbl-g1").innerHTML = html;
     $$("#tbl-g1 .btn-carta").forEach(b => b.onclick = () => {
       const r = G1_ROWS.find(x => (x["ID"] || "") === b.dataset.id);
@@ -1437,7 +1498,7 @@ el bienestar y la salud de nuestro talento.</p>
     $("#n-com").textContent = coms.length;
     $("#lista-com").innerHTML = coms.length ? coms.slice().reverse().map(c =>
       `<div class="aviso" style="margin:8px 0">
-        <div style="font-size:.78rem;color:#667">${fFecha(c["Marca temporal"])} · ${c["Guía"]} · ${c["Área"] || "sin área"} · ${c["Puesto"] || ""} ${c["Nombre"] ? "· " + c["Nombre"] : ""}</div>
+        <div style="font-size:.78rem;color:#667">${fFecha(c["Marca temporal"])} · ${escapar(proyectoDe(c).id)} · ${c["Guía"]} · ${escapar(c["Área"] || "sin área")} · ${escapar(c["Puesto"] || "")} ${c["Nombre"] ? "· " + escapar(c["Nombre"]) : ""}</div>
         <div style="margin-top:4px">${escapar(c["Comentario"] || "")}</div>
       </div>`).join("") : "<p style='color:#667'>Sin comentarios en el filtro actual.</p>";
   }
@@ -1448,7 +1509,9 @@ el bienestar y la salud de nuestro talento.</p>
     // guía, para poder distinguir un cambio real de riesgo de un simple cambio en la mezcla de
     // cuestionarios aplicados (ver promRiesgo()).
     const porCamp = {}, porCampG2 = {}, porCampG3 = {};
-    DATA.respuestas.forEach(r => {
+    const fpH = $("#f-proyecto").value;
+    const base = DATA.respuestas.filter(r => !fpH || proyectoDe(r).id === fpH);
+    base.forEach(r => {
       if (r["Guía"] === "Guía I" || !r.resultado || r.resultado.total === undefined) return;
       const v = promRiesgo(r);
       if (v == null) return;
@@ -1474,7 +1537,7 @@ el bienestar y la salud de nuestro talento.</p>
       options: { scales: { y: { beginAtZero: true, max: 4 } }, plugins: { legend: { position: "bottom" } } }
     });
     const cont = {};
-    DATA.respuestas.forEach(r => { const c = String(r["Campaña"] || "—"); cont[c] = cont[c] || { t: 0, g1: 0, g2: 0, g3: 0 }; cont[c].t++; if (r["Guía"] === "Guía I") cont[c].g1++; if (r["Guía"] === "Guía II") cont[c].g2++; if (r["Guía"] === "Guía III") cont[c].g3++; });
+    base.forEach(r => { const c = String(r["Campaña"] || "—"); cont[c] = cont[c] || { t: 0, g1: 0, g2: 0, g3: 0 }; cont[c].t++; if (r["Guía"] === "Guía I") cont[c].g1++; if (r["Guía"] === "Guía II") cont[c].g2++; if (r["Guía"] === "Guía III") cont[c].g3++; });
     let html = "<tr><th>Campaña</th><th>Total</th><th>Guía I</th><th>Guía II</th><th>Guía III</th>" +
       "<th>Riesgo prom. general (0-4)</th><th>Riesgo prom. Guía II</th><th>Riesgo prom. Guía III</th></tr>";
     html += Object.keys(cont).sort().map(c =>
@@ -1503,7 +1566,7 @@ el bienestar y la salud de nuestro talento.</p>
     const plano = rows.map(r => {
       const res = r.resultado || {};
       const base = {
-        Fecha: fFecha(r["Marca temporal"]), Campaña: r["Campaña"], Guía: r["Guía"],
+        Fecha: fFecha(r["Marca temporal"]), Campaña: r["Campaña"], "Proyecto ID": proyectoDe(r).id, Proyecto: proyectoDe(r).nombre, Guía: r["Guía"],
         Nombre: r["Nombre"] || "", Área: r["Área"] || "", Puesto: r["Puesto"] || "",
         Sexo: r["Sexo"] || "", Antigüedad: r["Antigüedad"] || "", "Tipo personal": r["Tipo personal"] || "",
         "Puntaje total": res.total !== undefined ? res.total : "",
@@ -1524,7 +1587,7 @@ el bienestar y la salud de nuestro talento.</p>
     const anexoA = rows.filter(r => r["Guía"] === "Guía I" && r.resultado).map((r, i) => {
       const x = r.resultado, cr = x.criterios || {};
       return {
-        "#": i + 1, "Nombre del evaluado": r["Nombre"] || "(anónimo)", "Área": r["Área"] || "",
+        "#": i + 1, "Nombre del evaluado": r["Nombre"] || "(sin nombre)", "Proyecto ID": proyectoDe(r).id, "Área": r["Área"] || "",
         Fecha: fFecha(r["Marca temporal"]),
         I: x.eventoTraumatico ? "OK" : "NA", II: cr.II ? "OK" : "NA", III: cr.III ? "OK" : "NA", IV: cr.IV ? "OK" : "NA",
         Resultado: x.requiereValoracion ? "Requiere valoración clínica" : "No requiere valoración clínica"
@@ -1532,9 +1595,11 @@ el bienestar y la salud de nuestro talento.</p>
     });
     if (anexoA.length) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(anexoA), "Anexo A - Guía I");
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(coms.map(c => ({
-      Fecha: fFecha(c["Marca temporal"]), Campaña: c["Campaña"], Guía: c["Guía"], Área: c["Área"] || "",
+      Fecha: fFecha(c["Marca temporal"]), Campaña: c["Campaña"], "Proyecto ID": proyectoDe(c).id, Guía: c["Guía"], Área: c["Área"] || "",
       Puesto: c["Puesto"] || "", Nombre: c["Nombre"] || "", Comentario: c["Comentario"] || ""
     }))), "Comentarios");
+    const cp = tablaAObjetos($("#tbl-proyectos"));
+    if (cp.length) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(cp), "Concentrado proyecto");
     // Concentrado por área (tabla actual)
     const conc = tablaAObjetos($("#tbl-concentrado"));
     if (conc.length) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(conc), "Concentrado área");

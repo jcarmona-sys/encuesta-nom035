@@ -435,7 +435,7 @@ canvas{max-width:100%}
         '<p class="pdesc">' + x.d + '</p>' +
         '<div class="qbox"></div>' +
         '<div class="purl">' + url + '</div>' +
-        '<div class="pfoot">Escanea con la cámara de tu teléfono · Participación confidencial · El nombre es opcional</div>';
+        '<div class="pfoot">Escanea con la cámara de tu teléfono · Participación confidencial · Se solicitan nombre y proyecto</div>';
       cont.appendChild(p);
       new QRCode(p.querySelector(".qbox"), { text: url, width: 230, height: 230, colorDark: "#020096", correctLevel: QRCode.CorrectLevel.M });
     });

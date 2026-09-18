@@ -401,8 +401,9 @@ canvas{max-width:100%}
     <div class="nota-conf">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
       <div><b>Privacidad y confidencialidad.</b> Tus respuestas y tus resultados son
-      confidenciales y se usan <b>exclusivamente</b> para identificar y prevenir factores de
-      riesgo psicosocial y mejorar el ambiente de trabajo. Escribir tu nombre es <b>opcional</b>.</div>
+      confidenciales: sólo los consulta el personal autorizado de Seguridad e Higiene / RH y se usan
+      <b>exclusivamente</b> para identificar y prevenir factores de riesgo psicosocial y mejorar el
+      ambiente de trabajo. Al final se te pedirá tu <b>nombre</b> y tu <b>proyecto</b>.</div>
     </div>
 
     <div class="instrucciones">
@@ -446,9 +447,16 @@ canvas{max-width:100%}
   <!-- Paso 3: ficha de datos generales -->
   <section id="paso-datos" class="card hidden">
     <h2>Ficha de datos generales</h2>
-    <p class="lead">Nos ayudan a analizar los resultados por área y puesto. Nada de esto te identifica si no escribes tu nombre.</p>
-    <label>Nombre <span class="opt">(opcional)</span></label>
-    <input type="text" id="d-nombre" autocomplete="off" placeholder="Puedes dejarlo en blanco">
+    <p class="lead">Nos ayudan a analizar los resultados por proyecto, área y puesto. Sólo el personal autorizado de Seguridad e Higiene / RH puede consultarlos. Los campos con * son obligatorios.</p>
+    <label>Nombre completo *</label>
+    <input type="text" id="d-nombre" autocomplete="name" placeholder="Nombre y apellidos">
+    <label>Proyecto *</label>
+    <select id="d-proyecto"></select>
+    <div id="otro-proyecto" class="hidden">
+      <label>ID y nombre del proyecto *</label>
+      <input type="text" id="d-proyecto-otro" autocomplete="off" placeholder="P0000 - Nombre del proyecto (Ubicación)">
+      <p class="muted" style="margin:6px 0 0">Escríbelo con este formato: <b>ID - Nombre (Ubicación)</b>. Ej.: P2502 - Proyecto vikingo 2.0 (Zitácuaro Michoacán)</p>
+    </div>
     <label>Área o departamento *</label>
     <input type="text" id="d-area" list="lista-areas" autocomplete="off" placeholder="Ej. Sistemas">
     <datalist id="lista-areas"></datalist>
@@ -460,7 +468,7 @@ canvas{max-width:100%}
     <select id="d-antig"><option value="">Selecciona</option><option>Menos de 1 año</option><option>1 a 5 años</option><option>6 a 10 años</option><option>Más de 10 años</option></select>
     <label>Tipo de personal</label>
     <select id="d-tipo"><option value="">Selecciona</option><option>Operativo</option><option>Administrativo</option><option>Mando medio / Jefatura</option><option>Dirección</option></select>
-    <div class="err hidden" id="err-datos"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg> Indica al menos el área o departamento.</div>
+    <div class="err hidden" id="err-datos"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg> <span id="err-datos-txt">Completa los campos obligatorios.</span></div>
     <div class="acciones">
       <button class="btn ghost" id="volver-preguntas">Volver al cuestionario</button>
       <button class="btn" id="enviar">Enviar respuestas</button>
@@ -512,6 +520,15 @@ window.APP_CONFIG = {
 
   /* Qué guías se muestran al trabajador. */
   GUIAS_DISPONIBLES: ["I", "II", "III"],
+
+  /* Proyectos que aparecen en la lista "Proyecto" de la ficha de datos.
+   * Formato del proyecto:  ID - Nombre (Ubicación)   ej.  P2502 - Proyecto vikingo 2.0 (Zitácuaro Michoacán)
+   * Para agregar uno, añade una línea { id, nombre, lugar }. Además la lista incluye la opción
+   * "Otro proyecto" donde se captura ese mismo formato; los que se capturen así aparecen solos en el
+   * filtro del panel (y se pueden pasar aquí para que salgan en la lista). */
+  PROYECTOS: [
+    { id: "P2502", nombre: "Proyecto vikingo 2.0", lugar: "Zitácuaro Michoacán" }
+  ],
 
   /* Sugerencias de área para autocompletar. */
   AREAS_SUGERIDAS: ["Administración", "Sistemas", "Operaciones", "Ventas", "Contabilidad", "Recursos Humanos", "Almacén", "Ingeniería", "Seguridad e Higiene", "Dirección"],
@@ -1161,9 +1178,48 @@ window.NOM035 = (function () {
     subir();
   };
 
+  // ---- proyecto (lista de config.js + "Otro proyecto") ----
+  const OTRO = "__otro__";
+  const proys = cfg.PROYECTOS || [];
+  const etiquetaProy = p => p.id + " - " + p.nombre + (p.lugar ? " (" + p.lugar + ")" : "");
+  const nombreProy = p => p.nombre + (p.lugar ? " (" + p.lugar + ")" : "");
+  (function () {
+    const s = $("#d-proyecto");
+    const o0 = el("option"); o0.value = ""; o0.textContent = "Selecciona tu proyecto"; s.appendChild(o0);
+    proys.forEach(p => { const o = el("option"); o.value = p.id; o.textContent = etiquetaProy(p); s.appendChild(o); });
+    const oo = el("option"); oo.value = OTRO; oo.textContent = "➕ Otro proyecto (agregar)"; s.appendChild(oo);
+    const pre = (qs.get("p") || "").trim().toUpperCase();
+    if (pre && proys.some(p => p.id.toUpperCase() === pre)) s.value = proys.find(p => p.id.toUpperCase() === pre).id;
+    s.onchange = () => $("#otro-proyecto").classList.toggle("hidden", s.value !== OTRO);
+    s.onchange();
+  })();
+
+  // Lee el proyecto elegido: devuelve {id, nombre} o null si es inválido
+  function leerProyecto() {
+    const v = $("#d-proyecto").value;
+    if (!v) return null;
+    if (v === OTRO) {
+      const m = $("#d-proyecto-otro").value.match(/^\s*(P\d{3,5})\s*[-–—]\s*(.{3,})\s*$/i);
+      return m ? { id: m[1].toUpperCase(), nombre: m[2].trim() } : null;
+    }
+    const p = proys.find(x => x.id === v);
+    return p ? { id: p.id, nombre: nombreProy(p) } : null;
+  }
+
+  function errDatos(msg, campo) {
+    $("#err-datos-txt").textContent = msg;
+    $("#err-datos").classList.remove("hidden");
+    if (campo) campo.focus();
+  }
+
   // ---- datos -> envío ----
   $("#enviar").onclick = () => {
-    if (!$("#d-area").value.trim()) { $("#err-datos").classList.remove("hidden"); $("#d-area").focus(); return; }
+    const nombre = $("#d-nombre").value.trim();
+    if (nombre.length < 3) return errDatos("El nombre completo es obligatorio.", $("#d-nombre"));
+    if (!$("#d-proyecto").value) return errDatos("Selecciona tu proyecto.", $("#d-proyecto"));
+    const proy = leerProyecto();
+    if (!proy) return errDatos("Escribe el proyecto con el formato: ID - Nombre (Ubicación). Ej.: P2502 - Proyecto vikingo 2.0 (Zitácuaro Michoacán).", $("#d-proyecto-otro"));
+    if (!$("#d-area").value.trim()) return errDatos("Indica tu área o departamento.", $("#d-area"));
     $("#err-datos").classList.add("hidden");
 
     const calif = N.calificar(guia, resp);
@@ -1173,7 +1229,7 @@ window.NOM035 = (function () {
       guia: guia.id, guiaClave: guia.clave, fecha: new Date().toISOString(),
       responsable: cfg.RESPONSABLE_EVALUACION || null,
       datos: {
-        nombre: $("#d-nombre").value.trim(), area: $("#d-area").value.trim(),
+        nombre: nombre, proyectoId: proy.id, proyecto: proy.nombre, area: $("#d-area").value.trim(),
         puesto: $("#d-puesto").value.trim(), sexo: $("#d-sexo").value,
         antiguedad: $("#d-antig").value, tipo: $("#d-tipo").value
       },
