@@ -1094,10 +1094,14 @@ window.NOM035 = (function () {
     $("#f-area").innerHTML = '<option value="">Todas</option>' + areas.map(a => `<option>${a}</option>`).join("");
 
     const proys = {};
-    (cfg.PROYECTOS || []).forEach(x => { proys[x.id.toUpperCase()] = { id: x.id.toUpperCase(), nombre: x.nombre + (x.lugar ? " (" + x.lugar + ")" : "") }; });
+    const esc = DATA.alcance && DATA.alcance.rol === "proyecto";   // clave de proyecto: el servidor ya sólo entrega ese proyecto
+    (cfg.PROYECTOS || []).filter(x => !esc || x.id.toUpperCase() === DATA.alcance.proyecto).forEach(x => { proys[x.id.toUpperCase()] = { id: x.id.toUpperCase(), nombre: x.nombre + (x.lugar ? " (" + x.lugar + ")" : "") }; });
     DATA.respuestas.forEach(r => { const x = proyectoDe(r); if (!proys[x.id] || !proys[x.id].nombre) proys[x.id] = x; });
     $("#f-proyecto").innerHTML = '<option value="">Todos los proyectos</option>' +
       Object.values(proys).sort((a, b) => a.id.localeCompare(b.id)).map(x => `<option value="${escapar(x.id)}">${escapar(etiquetaProy(x))}</option>`).join("");
+
+    if (esc && $("#f-proyecto").options.length > 1) { $("#f-proyecto").selectedIndex = 1; $("#f-proyecto").disabled = true; }
+    $("#sub").textContent = (cfg.CENTRO || "In Time Control") + (esc ? " · " + DATA.alcance.proyecto : " · Acceso total");
 
     $$("#f-campana,#f-guia,#f-area,#f-proyecto").forEach(s => s.onchange = render);
     $("#btn-recargar").onclick = () => cargar();
