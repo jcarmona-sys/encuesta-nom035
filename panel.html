@@ -446,6 +446,7 @@ canvas{max-width:100%}
       <button data-t="guia1">Guía I / Canalización</button>
       <button data-t="comentarios">Comentarios</button>
       <button data-t="historico">Histórico</button>
+      <button data-t="proyectosadmin" id="tab-proyectosadmin" class="hidden">Gestionar proyectos</button>
     </div>
 
     <div id="t-graficas">
@@ -493,6 +494,26 @@ canvas{max-width:100%}
         <div class="aviso warn hidden" id="nota-historico" style="margin-top:14px"></div>
       </div>
       <div class="card"><h3 style="margin-top:0">Participación por campaña</h3><div class="tbl-wrap"><table id="tbl-historico"></table></div></div>
+    </div>
+
+    <div id="t-proyectosadmin" class="hidden no-print">
+      <div class="card">
+        <h3 style="margin-top:0">Proyectos registrados</h3>
+        <p class="muted">Comunica a cada colaborador que debe elegir con cuidado su proyecto al contestar el cuestionario. Si un proyecto no aparece todavía en la lista, se puede capturar con "Otro proyecto" usando el formato <b>ID - Nombre (Ubicación)</b>, y aquí queda registrado con su clave.</p>
+        <div class="tbl-wrap"><table id="tbl-proyectos-admin"></table></div>
+      </div>
+      <div class="card">
+        <h3 style="margin-top:0">Dar de alta un proyecto nuevo</h3>
+        <label>ID del proyecto</label>
+        <input type="text" id="np-id" autocomplete="off" placeholder="Ej. P2701">
+        <label>Nombre</label>
+        <input type="text" id="np-nombre" autocomplete="off" placeholder="Ej. Proyecto Aurora">
+        <label>Ubicación <span class="opt">(opcional)</span></label>
+        <input type="text" id="np-lugar" autocomplete="off" placeholder="Ej. Monterrey, N.L.">
+        <div class="err hidden" id="err-np"></div>
+        <div class="acciones"><button class="btn" id="btn-crear-proy">Crear proyecto</button></div>
+        <div id="np-resultado" style="margin-top:14px"></div>
+      </div>
     </div>
 
     <div class="print-foot print-only">In Time Control · Documento de uso interno · Confidencial · NOM-035-STPS-2018</div>
@@ -1103,6 +1124,7 @@ window.NOM035 = (function () {
 
     if (esc && $("#f-proyecto").options.length > 1) { $("#f-proyecto").selectedIndex = 1; $("#f-proyecto").disabled = true; }
     $("#sub").textContent = (cfg.CENTRO || "In Time Control") + (esc ? " · " + DATA.alcance.proyecto : " · Acceso total");
+    if ($("#tab-proyectosadmin")) $("#tab-proyectosadmin").classList.toggle("hidden", !(DATA.alcance && DATA.alcance.rol === "admin"));
 
     $$("#f-campana,#f-guia,#f-area,#f-proyecto").forEach(s => s.onchange = render);
     $("#btn-recargar").onclick = () => cargar();
@@ -1111,8 +1133,9 @@ window.NOM035 = (function () {
     $$("#tabs button").forEach(b => b.onclick = () => {
       $$("#tabs button").forEach(x => x.classList.remove("act"));
       b.classList.add("act");
-      ["graficas", "concentrado", "individual", "guia1", "comentarios", "historico"]
+      ["graficas", "concentrado", "individual", "guia1", "comentarios", "historico", "proyectosadmin"]
         .forEach(t => $("#t-" + t).classList.toggle("hidden", t !== b.dataset.t));
+      if (b.dataset.t === "proyectosadmin") cargarProyectosAdmin();
     });
     if ($("#filtro-g1")) $$("#filtro-g1 button").forEach(b => b.onclick = () => {
       $$("#filtro-g1 button").forEach(x => x.classList.remove("act"));
@@ -1120,6 +1143,57 @@ window.NOM035 = (function () {
       G1_FILTRO = b.dataset.f;
       renderTablaG1();
     });
+    if ($("#btn-crear-proy")) $("#btn-crear-proy").onclick = crearProyecto;
+  }
+
+  /* ---- Gestionar proyectos (sólo clave maestra) ---- */
+  function cargarProyectosAdmin() {
+    const tbl = $("#tbl-proyectos-admin");
+    tbl.innerHTML = "<tr><td>Cargando…</td></tr>";
+    api({ action: "proyectos" }).then(res => {
+      if (!res || !res.ok) { tbl.innerHTML = "<tr><td>No se pudo cargar (" + ((res && res.error) || "error") + ").</td></tr>"; return; }
+      renderTablaProyectosAdmin(res.proyectos || []);
+    }).catch(() => { tbl.innerHTML = "<tr><td>No se pudo cargar.</td></tr>"; });
+  }
+  function renderTablaProyectosAdmin(lista) {
+    const conteo = {};
+    DATA.respuestas.forEach(r => { const id = proyectoDe(r).id; conteo[id] = (conteo[id] || 0) + 1; });
+    let html = "<tr><th>ID</th><th>Nombre</th><th>Respuestas</th><th>Clave</th><th>Creado</th><th class='no-print'></th></tr>";
+    html += lista.map(p => `<tr><td><b>${escapar(p.id)}</b></td><td>${escapar(p.nombre)}</td><td>${conteo[p.id] || 0}</td>` +
+      `<td style="font-family:monospace;font-size:.82rem">${escapar(p.clave || "—")}</td><td>${fFecha(p.creado || p.Creado || "")}</td>` +
+      `<td class="no-print">${p.clave ? `<button class="btn ghost btn-copiar-clave" data-clave="${escapar(p.clave)}" style="padding:5px 12px;font-size:.8rem">Copiar clave</button>` : ""}</td></tr>`).join("");
+    if (!lista.length) html = "<tr><td>Sin proyectos registrados.</td></tr>";
+    $("#tbl-proyectos-admin").innerHTML = html;
+    $$("#tbl-proyectos-admin .btn-copiar-clave").forEach(b => b.onclick = () => {
+      const clave = b.dataset.clave;
+      (navigator.clipboard ? navigator.clipboard.writeText(clave) : Promise.reject())
+        .then(() => { b.textContent = "¡Copiada!"; setTimeout(() => { b.textContent = "Copiar clave"; }, 1500); })
+        .catch(() => alert("Clave: " + clave));
+    });
+  }
+  function errNP(msg) { $("#err-np").textContent = msg; $("#err-np").classList.remove("hidden"); }
+  function crearProyecto() {
+    const id = $("#np-id").value.trim().toUpperCase();
+    const nombre = $("#np-nombre").value.trim();
+    const lugar = $("#np-lugar").value.trim();
+    if (!/^[A-Z]\d{3,5}$/.test(id)) return errNP("El ID debe ser una letra seguida de 3 a 5 números. Ej.: P2701.");
+    if (nombre.length < 3) return errNP("Escribe el nombre del proyecto.");
+    $("#err-np").classList.add("hidden");
+    const nombreCompleto = lugar ? nombre + " (" + lugar + ")" : nombre;
+    const btn = $("#btn-crear-proy");
+    btn.disabled = true; btn.textContent = "Creando…";
+    fetch(cfg.API_URL, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify({ token: TOKEN, accion: "crearProyecto", id, nombre: nombreCompleto }) })
+      .then(r => r.json())
+      .then(res => {
+        if (!res || !res.ok) throw new Error((res && res.error) || "error");
+        $("#np-resultado").innerHTML = `<div class="aviso info"><b>Proyecto creado.</b> ${escapar(res.proyecto.id)} — ${escapar(res.proyecto.nombre)}<br>` +
+          `Clave de lectura: <span style="font-family:monospace">${escapar(res.proyecto.clave)}</span><br>` +
+          `<span class="muted">Compártela sólo con quien deba ver este proyecto. Ya está disponible en el formulario.</span></div>`;
+        $("#np-id").value = ""; $("#np-nombre").value = ""; $("#np-lugar").value = "";
+        cargarProyectosAdmin();
+      })
+      .catch(err => errNP("No se pudo crear (" + err.message + ")."))
+      .finally(() => { btn.disabled = false; btn.textContent = "Crear proyecto"; });
   }
 
   /* ---- filtrado ---- */

@@ -452,6 +452,7 @@ canvas{max-width:100%}
     <input type="text" id="d-nombre" autocomplete="name" placeholder="Nombre y apellidos">
     <label>Proyecto *</label>
     <select id="d-proyecto"></select>
+    <p class="muted" style="margin:6px 0 0">Elige con cuidado tu proyecto: es lo que permite contar tus resultados en el lugar correcto.</p>
     <div id="otro-proyecto" class="hidden">
       <label>ID y nombre del proyecto *</label>
       <input type="text" id="d-proyecto-otro" autocomplete="off" placeholder="P0000 - Nombre del proyecto (Ubicación)">
@@ -1180,21 +1181,38 @@ window.NOM035 = (function () {
     subir();
   };
 
-  // ---- proyecto (lista de config.js + "Otro proyecto") ----
+  // ---- proyecto: lista en vivo del servidor (con cfg.PROYECTOS como respaldo si no hay red) + "Otro proyecto" ----
   const OTRO = "__otro__";
-  const proys = cfg.PROYECTOS || [];
-  const etiquetaProy = p => p.id + " - " + p.nombre + (p.lugar ? " (" + p.lugar + ")" : "");
-  const nombreProy = p => p.nombre + (p.lugar ? " (" + p.lugar + ")" : "");
-  (function () {
+  // Un proyecto puede venir de config.js ({id, nombre, lugar}) o del servidor ({id, nombre} ya con la
+  // ubicación incluida en el nombre) — estas dos funciones aceptan ambas formas.
+  const nombreProy = p => (p.lugar !== undefined) ? (p.nombre + (p.lugar ? " (" + p.lugar + ")" : "")) : p.nombre;
+  const etiquetaProy = p => p.id + " - " + nombreProy(p);
+  let proys = cfg.PROYECTOS || [];
+
+  function poblarProyectos(lista) {
     const s = $("#d-proyecto");
+    const previo = s.value;
+    s.innerHTML = "";
     const o0 = el("option"); o0.value = ""; o0.textContent = "Selecciona tu proyecto"; s.appendChild(o0);
-    proys.forEach(p => { const o = el("option"); o.value = p.id; o.textContent = etiquetaProy(p); s.appendChild(o); });
+    lista.forEach(p => { const o = el("option"); o.value = p.id; o.textContent = etiquetaProy(p); s.appendChild(o); });
     const oo = el("option"); oo.value = OTRO; oo.textContent = "➕ Otro proyecto (agregar)"; s.appendChild(oo);
     const pre = (qs.get("p") || "").trim().toUpperCase();
-    if (pre && proys.some(p => p.id.toUpperCase() === pre)) s.value = proys.find(p => p.id.toUpperCase() === pre).id;
+    if (pre && lista.some(p => p.id.toUpperCase() === pre)) s.value = lista.find(p => p.id.toUpperCase() === pre).id;
+    else if (previo) s.value = previo;
     s.onchange = () => $("#otro-proyecto").classList.toggle("hidden", s.value !== OTRO);
     s.onchange();
-  })();
+  }
+  poblarProyectos(proys);
+  // Actualiza en cuanto responde el servidor: así un proyecto recién dado de alta en el panel aparece
+  // sin tener que republicar el formulario. Si falla (sin red, API no configurada), se queda con cfg.PROYECTOS.
+  if (cfg.API_URL) {
+    const u = new URL(cfg.API_URL);
+    u.searchParams.set("token", cfg.TOKEN);
+    u.searchParams.set("action", "proyectos_publico");
+    fetch(u.toString()).then(r => r.json()).then(res => {
+      if (res && res.ok && res.proyectos && res.proyectos.length) { proys = res.proyectos; poblarProyectos(proys); }
+    }).catch(() => {});
+  }
 
   // Lee el proyecto elegido: devuelve {id, nombre} o null si es inválido
   function leerProyecto() {
