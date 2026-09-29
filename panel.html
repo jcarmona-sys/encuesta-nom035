@@ -1194,8 +1194,8 @@ window.NOM035 = (function () {
       campanas.map(c => `<option>${c}</option>`).join("");
     if (campanas.includes(cfg.CAMPANA)) camp.value = cfg.CAMPANA;
 
-    const areas = [...new Set(DATA.respuestas.map(r => (r["Área"] || "").trim()).filter(Boolean))].sort();
-    $("#f-area").innerHTML = '<option value="">Todas</option>' + areas.map(a => `<option>${a}</option>`).join("");
+    const areas = agruparPorArea(DATA.respuestas.filter(r => (r["Área"] || "").trim())).map(g => g.label);
+    $("#f-area").innerHTML = '<option value="">Todas</option>' + areas.map(a => `<option>${escapar(a)}</option>`).join("");
 
     const proys = {};
     const esc = DATA.alcance && DATA.alcance.rol === "proyecto";   // clave de proyecto: el servidor ya sólo entrega ese proyecto
@@ -1284,12 +1284,12 @@ window.NOM035 = (function () {
     const rows = DATA.respuestas.filter(r =>
       (!fc || String(r["Campaña"]) === fc) &&
       (!fg || r["Guía"] === fg) &&
-      (!fa || (r["Área"] || "").trim() === fa) &&
+      (!fa || normAreaKey(r["Área"]) === normAreaKey(fa)) &&
       (!fp || proyectoDe(r).id === fp));
     const coms = DATA.comentarios.filter(c =>
       (!fc || String(c["Campaña"]) === fc) &&
       (!fg || c["Guía"] === fg) &&
-      (!fa || (c["Área"] || "").trim() === fa) &&
+      (!fa || normAreaKey(c["Área"]) === normAreaKey(fa)) &&
       (!fp || proyectoDe(c).id === fp));
     // rowsActivos excluye las anuladas: es lo que alimenta KPIs, gráficas, concentrados e histórico.
     // rows (completo, con anuladas) sigue disponible para el detalle, Guía I, el historial por persona y el Excel.
@@ -1370,6 +1370,40 @@ window.NOM035 = (function () {
   }
   function promedio(arr) { return arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : null; }
 
+  /* Agrupa filas por área tolerando mayúsculas/espacios distintos para la misma área
+   * (p. ej. "Operaciones" y "OPERACIONES" capturadas por personas distintas): se agrupan
+   * bajo una sola clave y se muestran con la variante de escritura más usada. Sin esto,
+   * la misma área aparecía partida en varias barras/filas en gráficas y concentrados. */
+  function normAreaKey(a) { return String(a || "").trim().replace(/\s+/g, " ").toLowerCase(); }
+  function agruparPorArea(rows) {
+    const m = new Map();
+    rows.forEach(r => {
+      const raw = String(r["Área"] || "").trim().replace(/\s+/g, " ") || "Sin área";
+      const key = normAreaKey(raw);
+      if (!m.has(key)) m.set(key, { label: raw, labelCounts: {}, rows: [] });
+      const g = m.get(key);
+      g.rows.push(r);
+      g.labelCounts[raw] = (g.labelCounts[raw] || 0) + 1;
+    });
+    m.forEach(g => { g.label = Object.entries(g.labelCounts).sort((a, b) => b[1] - a[1])[0][0]; });
+    return [...m.values()].sort((a, b) => a.label.localeCompare(b.label));
+  }
+  /* Placeholder de "sin datos" para una gráfica (evita un canvas en blanco que parece roto
+   * cuando el filtro actual no tiene datos de ese tipo, p. ej. un proyecto con sólo Guía I). */
+  function marcarVacia(canvasId, vacia, mensaje) {
+    const cv = $("#" + canvasId);
+    cv.style.display = vacia ? "none" : "";
+    let nota = cv.parentElement.querySelector(".nota-vacia-" + canvasId);
+    if (vacia) {
+      if (!nota) {
+        nota = el("p", "muted nota-vacia-" + canvasId);
+        cv.parentElement.appendChild(nota);
+      }
+      nota.textContent = mensaje;
+    } else if (nota) nota.remove();
+  }
+  function el(tag, cls) { const e = document.createElement(tag); if (cls) e.className = cls; return e; }
+
   /* ---- KPIs ---- */
   function kpis(rows) {
     const frec = soloFrec(rows);
@@ -1404,6 +1438,8 @@ window.NOM035 = (function () {
   /* ---- gráficas ---- */
   function graficaNiveles(rows) {
     const frec = soloFrec(rows);
+    marcarVacia("c-niveles", !frec.length, "Sin datos de Guías II/III en el filtro (este proyecto/filtro sólo tiene Guía I por ahora).");
+    if (!frec.length) return;
     const cuenta = N.NIVELES.map(nv => frec.filter(r => r.resultado.nivel === nv).length);
     nuevoChart("c-niveles", {
       type: "doughnut",
@@ -1412,12 +1448,12 @@ window.NOM035 = (function () {
     });
   }
   function graficaAreas(rows) {
-    const areas = {};
-    rows.forEach(r => { const a = (r["Área"] || "Sin área").trim() || "Sin área"; areas[a] = (areas[a] || 0) + 1; });
-    const labels = Object.keys(areas).sort();
+    marcarVacia("c-areas", !rows.length, "Sin respuestas en el filtro actual.");
+    if (!rows.length) return;
+    const grupos = agruparPorArea(rows);
     nuevoChart("c-areas", {
       type: "bar",
-      data: { labels, datasets: [{ label: "Respuestas", data: labels.map(l => areas[l]), backgroundColor: BRAND, borderRadius: 4 }] },
+      data: { labels: grupos.map(g => g.label), datasets: [{ label: "Respuestas", data: grupos.map(g => g.rows.length), backgroundColor: BRAND, borderRadius: 4 }] },
       options: { indexAxis: "y", plugins: { legend: { display: false } } }
     });
   }
@@ -1431,6 +1467,8 @@ window.NOM035 = (function () {
       });
     });
     const labels = Object.keys(acc).sort();
+    marcarVacia("c-dominios", !labels.length, "Sin datos de Guías II/III en el filtro (este proyecto/filtro sólo tiene Guía I por ahora).");
+    if (!labels.length) return;
     const datos = labels.map(l => +(acc[l].reduce((a, b) => a + b, 0) / acc[l].length).toFixed(2));
     nuevoChart("c-dominios", {
       type: "bar",
@@ -1497,13 +1535,7 @@ window.NOM035 = (function () {
 
   function concentradoArea(rows) {
     const frec = soloFrec(rows);
-    const areas = {};
-    frec.forEach(r => {
-      const a = (r["Área"] || "Sin área").trim() || "Sin área";
-      (areas[a] = areas[a] || []).push(r);
-    });
-    const filas = Object.keys(areas).sort().map(a => {
-      const g = areas[a];
+    const filas = agruparPorArea(frec).map(({ label, rows: g }) => {
       const prom = promedio(g.map(promRiesgo).filter(v => v != null));
       const dist = N.NIVELES.map(nv => g.filter(r => r.resultado.nivel === nv).length);
       // Nivel predominante = moda de los niveles individuales (cada uno ya calculado con la
@@ -1512,11 +1544,11 @@ window.NOM035 = (function () {
       const conteo = {};
       g.forEach(r => { conteo[r.resultado.nivel] = (conteo[r.resultado.nivel] || 0) + 1; });
       const nivelPred = Object.keys(conteo).sort((x, y) => conteo[y] - conteo[x])[0];
-      return { a, n: g.length, prom: prom != null ? prom.toFixed(2) : "—", nivelPred, dist };
+      return { a: label, n: g.length, prom: prom != null ? prom.toFixed(2) : "—", nivelPred, dist };
     });
     let html = "<tr><th>Área</th><th>n</th><th>Riesgo prom. (0-4)</th><th>Nivel predominante</th>" +
       N.NIVELES.map(nv => `<th>${nv}</th>`).join("") + "</tr>";
-    html += filas.map(f => `<tr><td>${f.a}</td><td>${f.n}</td><td>${f.prom}</td><td>${chip(f.nivelPred)}</td>` +
+    html += filas.map(f => `<tr><td>${escapar(f.a)}</td><td>${f.n}</td><td>${f.prom}</td><td>${chip(f.nivelPred)}</td>` +
       f.dist.map(d => `<td>${d || ""}</td>`).join("") + "</tr>").join("");
     if (!filas.length) html = "<tr><td>Sin datos de Guías II/III en el filtro.</td></tr>";
     $("#tbl-concentrado").innerHTML = html;
@@ -1526,17 +1558,18 @@ window.NOM035 = (function () {
     const frec = soloFrec(rows);
     const porArea = {};
     const dominios = new Set();
-    frec.forEach(r => {
-      const a = (r["Área"] || "Sin área").trim() || "Sin área";
-      porArea[a] = porArea[a] || {};
-      Object.entries((r.resultado && r.resultado.dominios) || {}).forEach(([k, v]) => {
-        if (v && v.promedio != null) { (porArea[a][k] = porArea[a][k] || []).push(v.promedio); dominios.add(k); }
+    agruparPorArea(frec).forEach(({ label, rows: g }) => {
+      porArea[label] = porArea[label] || {};
+      g.forEach(r => {
+        Object.entries((r.resultado && r.resultado.dominios) || {}).forEach(([k, v]) => {
+          if (v && v.promedio != null) { (porArea[label][k] = porArea[label][k] || []).push(v.promedio); dominios.add(k); }
+        });
       });
     });
     const doms = [...dominios].sort();
     let html = "<tr><th>Área</th>" + doms.map(d => `<th>${d}</th>`).join("") + "</tr>";
     html += Object.keys(porArea).sort().map(a => {
-      return `<tr><td>${a}</td>` + doms.map(d => {
+      return `<tr><td>${escapar(a)}</td>` + doms.map(d => {
         const arr = porArea[a][d];
         if (!arr) return "<td>—</td>";
         const p = arr.reduce((x, y) => x + y, 0) / arr.length;
