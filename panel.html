@@ -452,10 +452,10 @@ canvas{max-width:100%}
 
     <div id="t-graficas">
       <div class="grid2">
-        <div class="card"><h3 style="margin-top:0">Distribución por nivel de riesgo</h3><canvas id="c-niveles" height="220"></canvas></div>
+        <div class="card"><h3 style="margin-top:0">Distribución por nivel de riesgo <span class="muted" id="c-niveles-sub"></span></h3><canvas id="c-niveles" height="220"></canvas></div>
         <div class="card"><h3 style="margin-top:0">Participación por área</h3><canvas id="c-areas" height="220"></canvas></div>
       </div>
-      <div class="card"><h3 style="margin-top:0">Promedio de riesgo por dominio <span class="muted">(0 = sin riesgo · 4 = máximo)</span></h3><canvas id="c-dominios" height="240"></canvas></div>
+      <div class="card"><h3 style="margin-top:0" id="c-dominios-tit">Promedio de riesgo por dominio <span class="muted">(0 = sin riesgo · 4 = máximo)</span></h3><canvas id="c-dominios" height="240"></canvas></div>
       <div class="card"><h3 style="margin-top:0">Reactivos con mayor riesgo promedio (top 15)</h3><canvas id="c-items" height="300"></canvas></div>
     </div>
 
@@ -1438,12 +1438,30 @@ window.NOM035 = (function () {
   /* ---- gráficas ---- */
   function graficaNiveles(rows) {
     const frec = soloFrec(rows);
-    marcarVacia("c-niveles", !frec.length, "Sin datos de Guías II/III en el filtro (este proyecto/filtro sólo tiene Guía I por ahora).");
-    if (!frec.length) return;
-    const cuenta = N.NIVELES.map(nv => frec.filter(r => r.resultado.nivel === nv).length);
+    if ($("#c-niveles-sub")) $("#c-niveles-sub").textContent = frec.length ? "" : "(Guía I)";
+    if (frec.length) {
+      marcarVacia("c-niveles", false);
+      const cuenta = N.NIVELES.map(nv => frec.filter(r => r.resultado.nivel === nv).length);
+      nuevoChart("c-niveles", {
+        type: "doughnut",
+        data: { labels: N.NIVELES, datasets: [{ data: cuenta, backgroundColor: PALETA }] },
+        options: { plugins: { legend: { position: "bottom" } } }
+      });
+      return;
+    }
+    // Sin Guía II/III en el filtro: si hay Guía I, se grafica su resultado en vez de dejar la tarjeta vacía.
+    const g1 = rows.filter(r => r["Guía"] === "Guía I" && r.resultado);
+    marcarVacia("c-niveles", !g1.length, "Sin respuestas en el filtro actual.");
+    if (!g1.length) return;
+    const pendiente = g1.filter(esPendienteG1).length;
+    const resuelta = g1.filter(r => r.resultado.requiereValoracion && esCorregidaG1(r)).length;
+    const noRequirio = g1.length - pendiente - resuelta;
     nuevoChart("c-niveles", {
       type: "doughnut",
-      data: { labels: N.NIVELES, datasets: [{ data: cuenta, backgroundColor: PALETA }] },
+      data: {
+        labels: ["No requiere valoración", "Requiere valoración (pendiente)", "Resuelta (ya no requiere)"],
+        datasets: [{ data: [noRequirio, pendiente, resuelta], backgroundColor: ["#8bbf3f", "#d6392b", "#3f9e6b"] }]
+      },
       options: { plugins: { legend: { position: "bottom" } } }
     });
   }
@@ -1467,13 +1485,36 @@ window.NOM035 = (function () {
       });
     });
     const labels = Object.keys(acc).sort();
-    marcarVacia("c-dominios", !labels.length, "Sin datos de Guías II/III en el filtro (este proyecto/filtro sólo tiene Guía I por ahora).");
-    if (!labels.length) return;
-    const datos = labels.map(l => +(acc[l].reduce((a, b) => a + b, 0) / acc[l].length).toFixed(2));
+    if ($("#c-dominios-tit"))
+      $("#c-dominios-tit").innerHTML = labels.length
+        ? 'Promedio de riesgo por dominio <span class="muted">(0 = sin riesgo · 4 = máximo)</span>'
+        : 'Criterios de Guía I <span class="muted">(sin datos de Guías II/III en el filtro)</span>';
+    if (labels.length) {
+      marcarVacia("c-dominios", false);
+      const datos = labels.map(l => +(acc[l].reduce((a, b) => a + b, 0) / acc[l].length).toFixed(2));
+      nuevoChart("c-dominios", {
+        type: "bar",
+        data: { labels, datasets: [{ label: "Promedio (0-4)", data: datos, backgroundColor: datos.map(colorPorPromedio), borderRadius: 4 }] },
+        options: { indexAxis: "y", scales: { x: { max: 4 } }, plugins: { legend: { display: false } } }
+      });
+      return;
+    }
+    // Sin Guía II/III en el filtro: Guía I no tiene "dominios", así que se grafican sus criterios
+    // (Sección I a IV) en vez de dejar la tarjeta vacía.
+    const g1 = rows.filter(r => r["Guía"] === "Guía I" && r.resultado);
+    marcarVacia("c-dominios", !g1.length, "Sin respuestas en el filtro actual.");
+    if (!g1.length) return;
+    const criterioLabels = ["Sección I: acontecimiento traumático", "Sección II: recuerdos persistentes", "Sección III: evitación", "Sección IV: afectación"];
+    const criterioCuenta = [
+      g1.filter(r => r.resultado.eventoTraumatico).length,
+      g1.filter(r => r.resultado.criterios && r.resultado.criterios.II).length,
+      g1.filter(r => r.resultado.criterios && r.resultado.criterios.III).length,
+      g1.filter(r => r.resultado.criterios && r.resultado.criterios.IV).length
+    ];
     nuevoChart("c-dominios", {
       type: "bar",
-      data: { labels, datasets: [{ label: "Promedio (0-4)", data: datos, backgroundColor: datos.map(colorPorPromedio), borderRadius: 4 }] },
-      options: { indexAxis: "y", scales: { x: { max: 4 } }, plugins: { legend: { display: false } } }
+      data: { labels: criterioLabels, datasets: [{ label: "Casos (de " + g1.length + ")", data: criterioCuenta, backgroundColor: BRAND, borderRadius: 4 }] },
+      options: { indexAxis: "y", scales: { x: { beginAtZero: true, ticks: { precision: 0 } } }, plugins: { legend: { display: false } } }
     });
   }
   function colorPorPromedio(p) { return p < 1 ? PALETA[0] : p < 1.75 ? PALETA[1] : p < 2.5 ? PALETA[2] : p < 3.25 ? PALETA[3] : PALETA[4]; }
