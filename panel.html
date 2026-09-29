@@ -444,6 +444,7 @@ canvas{max-width:100%}
       <button data-t="concentrado">Concentrados</button>
       <button data-t="individual">Detalle individual</button>
       <button data-t="guia1">Guía I / Canalización</button>
+      <button data-t="historial">Historial por persona</button>
       <button data-t="comentarios">Comentarios</button>
       <button data-t="historico">Histórico</button>
       <button data-t="proyectosadmin" id="tab-proyectosadmin" class="hidden">Gestionar proyectos</button>
@@ -472,13 +473,21 @@ canvas{max-width:100%}
       <div class="card">
         <h3 style="margin-top:0">Guía I — Resultados (Anexo A · ITC-PRC-A-004)</h3>
         <div class="kpis" id="kpis-g1" style="margin-bottom:16px"></div>
-        <p class="muted">Requiere valoración clínica cuando hubo acontecimiento traumático (Sección I = OK) y se cumple <b>cualquiera</b>: Sección II ≥ 1, Sección III ≥ 3 o Sección IV ≥ 2. Para cada caso, el botón <b>Generar carta</b> produce la Carta de Canalización ITC-FMT-A-004-04 lista para imprimir.</p>
+        <p class="muted">Requiere valoración clínica cuando hubo acontecimiento traumático (Sección I = OK) y se cumple <b>cualquiera</b>: Sección II ≥ 1, Sección III ≥ 3 o Sección IV ≥ 2. Para cada caso, el botón <b>Generar carta</b> produce la Carta de Canalización ITC-FMT-A-004-04 lista para imprimir. Si la persona ya fue atendida y ya no necesita valoración ni carta, usa <b>Marcar resuelto</b>: el caso queda visible en el historial pero deja de contarse como pendiente. <b>Anular</b> no borra nada; sólo excluye esa respuesta de las gráficas y concentrados y se puede restaurar cuando quieras.</p>
         <div class="seg-filtro no-print" id="filtro-g1">
           <button type="button" class="act" data-f="todos">Todos</button>
           <button type="button" data-f="req">Requieren valoración clínica</button>
           <button type="button" data-f="noreq">No requieren valoración</button>
         </div>
         <div class="tbl-wrap"><table id="tbl-g1"></table></div>
+      </div>
+    </div>
+
+    <div id="t-historial" class="hidden">
+      <div class="card">
+        <h3 style="margin-top:0">Personal que respondió dos o más veces (<span id="n-historial-personas">0</span>)</h3>
+        <p class="muted">Se agrupa por nombre, proyecto, área y puesto. Muestra el historial completo de cada persona (todas sus respuestas, en todas las campañas) para poder darle seguimiento en el tiempo o detectar duplicados.</p>
+        <div class="tbl-wrap"><table id="tbl-historial-personal"></table></div>
       </div>
     </div>
 
@@ -1105,6 +1114,79 @@ window.NOM035 = (function () {
   }
   const etiquetaProy = p => p.id === SIN_PROY.id ? SIN_PROY.nombre : (p.nombre ? p.id + " - " + p.nombre : p.id);
 
+  /* ---- anulación (baja lógica) y corrección de Guía I ----
+   * Anular NUNCA borra la fila: sólo la excluye de KPIs/gráficas/concentrados/histórico y la marca
+   * en las tablas de detalle, que siguen mostrando el historial completo (incluidas las anuladas). */
+  const esActiva = r => (r["Anulada"] || "") !== "Sí";
+  const esCorregidaG1 = r => (r["Corregida Guía I"] || "") === "Sí";
+  const esPendienteG1 = r => !!(r.resultado && r.resultado.guiaI && r.resultado.requiereValoracion) && !esCorregidaG1(r);
+
+  /* Identifica a la misma persona entre dos o más respuestas: nombre + proyecto + área + puesto,
+   * normalizado (sin mayúsculas ni espacios de más). Vacío si no hay nombre (no se agrupan anónimos). */
+  function personaKey(r) {
+    const nombre = String(r["Nombre"] || "").trim().toLowerCase();
+    if (!nombre) return "";
+    const norm = s => String(s || "").trim().toLowerCase().replace(/\s+/g, " ");
+    return [nombre, proyectoDe(r).id, norm(r["Área"]), norm(r["Puesto"])].join("|");
+  }
+
+  function accionesFila(r, extra) {
+    const anulada = !esActiva(r);
+    const btns = [];
+    btns.push(`<button class="btn ghost btn-anular" data-id="${escapar(r["ID"] || "")}" data-accion="${anulada ? "restaurar" : "anular"}" style="padding:5px 10px;font-size:.78rem">${anulada ? "Restaurar" : "Anular"}</button>`);
+    return `<td class="no-print">${btns.join(" ")}${extra || ""}</td>`;
+  }
+  function estadoBadge(r) {
+    if (!esActiva(r)) {
+      const info = [r["Anulada por"], fFecha(r["Anulada fecha"])].filter(Boolean).join(" · ");
+      return `<span class="chip" style="background:#eee;color:#777">Anulada</span>` + (info ? `<div class="muted" style="font-size:.72rem">${escapar(info)}</div>` : "");
+    }
+    return "";
+  }
+
+  /* Aplica el resultado de anular/restaurar/corregir sobre los datos ya cargados, sin recargar todo. */
+  function actualizarFilaLocal(id, cambios) {
+    const r = DATA.respuestas.find(x => String(x["ID"]) === String(id));
+    if (r) Object.assign(r, cambios);
+  }
+  function quienSoy() { return DATA.alcance && DATA.alcance.rol === "admin" ? "Maestra" : (DATA.alcance && DATA.alcance.proyecto) || ""; }
+  function anularFila(id, anular, boton) {
+    if (!confirm(anular
+      ? "¿Anular esta respuesta? Deja de contar en gráficas y concentrados, pero la fila se conserva completa y se puede restaurar."
+      : "¿Restaurar esta respuesta? Volverá a contar en gráficas y concentrados.")) return;
+    if (boton) { boton.disabled = true; }
+    fetch(cfg.API_URL, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify({ token: TOKEN, accion: anular ? "anular" : "restaurar", id }) })
+      .then(r => r.json())
+      .then(res => {
+        if (!res || !res.ok) throw new Error((res && res.error) || "error");
+        actualizarFilaLocal(id, anular
+          ? { "Anulada": "Sí", "Anulada fecha": new Date().toISOString(), "Anulada por": quienSoy() }
+          : { "Anulada": "", "Anulada fecha": "", "Anulada por": "" });
+        render();
+      })
+      .catch(err => alert("No se pudo actualizar (" + err.message + ")."))
+      .finally(() => { if (boton) boton.disabled = false; });
+  }
+  function corregirG1Fila(id, corregido, boton) {
+    let nota = "";
+    if (corregido) {
+      nota = prompt("Opcional: indica el motivo (por ejemplo, ya fue valorado y dado de alta).", "") || "";
+      if (nota === null) return;
+    } else if (!confirm("¿Revertir la corrección? Volverá a marcarse como pendiente de valoración clínica.")) return;
+    if (boton) boton.disabled = true;
+    fetch(cfg.API_URL, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify({ token: TOKEN, accion: "corregirGuia1", id, corregido, nota }) })
+      .then(r => r.json())
+      .then(res => {
+        if (!res || !res.ok) throw new Error((res && res.error) || "error");
+        actualizarFilaLocal(id, corregido
+          ? { "Corregida Guía I": "Sí", "Corregida fecha": new Date().toISOString(), "Corregida por": quienSoy(), "Corregida nota": nota }
+          : { "Corregida Guía I": "", "Corregida fecha": "", "Corregida por": "", "Corregida nota": "" });
+        render();
+      })
+      .catch(err => alert("No se pudo actualizar (" + err.message + ")."))
+      .finally(() => { if (boton) boton.disabled = false; });
+  }
+
   function prepararFiltros() {
     const camp = $("#f-campana");
     const campanas = (DATA.campanas && DATA.campanas.length ? DATA.campanas : [cfg.CAMPANA]).slice().sort();
@@ -1133,7 +1215,7 @@ window.NOM035 = (function () {
     $$("#tabs button").forEach(b => b.onclick = () => {
       $$("#tabs button").forEach(x => x.classList.remove("act"));
       b.classList.add("act");
-      ["graficas", "concentrado", "individual", "guia1", "comentarios", "historico", "proyectosadmin"]
+      ["graficas", "concentrado", "individual", "guia1", "historial", "comentarios", "historico", "proyectosadmin"]
         .forEach(t => $("#t-" + t).classList.toggle("hidden", t !== b.dataset.t));
       if (b.dataset.t === "proyectosadmin") cargarProyectosAdmin();
     });
@@ -1209,27 +1291,39 @@ window.NOM035 = (function () {
       (!fg || c["Guía"] === fg) &&
       (!fa || (c["Área"] || "").trim() === fa) &&
       (!fp || proyectoDe(c).id === fp));
-    return { rows, coms, fg };
+    // rowsActivos excluye las anuladas: es lo que alimenta KPIs, gráficas, concentrados e histórico.
+    // rows (completo, con anuladas) sigue disponible para el detalle, Guía I, el historial por persona y el Excel.
+    return { rows, rowsActivos: rows.filter(esActiva), coms, fg };
   }
 
   function render() {
-    const { rows, coms, fg } = filtrar();
-    $("#meta").textContent = `Datos generados: ${new Date(DATA.generado).toLocaleString()} · ${rows.length} respuestas en el filtro actual`;
+    const { rows, rowsActivos, coms, fg } = filtrar();
+    const anuladas = rows.length - rowsActivos.length;
+    $("#meta").textContent = `Datos generados: ${new Date(DATA.generado).toLocaleString()} · ${rowsActivos.length} respuestas activas en el filtro actual` +
+      (anuladas ? ` · ${anuladas} anulada${anuladas === 1 ? "" : "s"}` : "");
     $("#tit-resumen").textContent = "Resumen — " + (fg || "General (todos los cuestionarios)");
-    kpis(rows);
-    graficaNiveles(rows);
-    graficaAreas(rows);
-    graficaDominios(rows);
-    graficaItems(rows, fg);
-    concentradoProyecto(rows);
-    concentradoArea(rows);
-    concentradoDominio(rows);
+    kpis(rowsActivos);
+    graficaNiveles(rowsActivos);
+    graficaAreas(rowsActivos);
+    graficaDominios(rowsActivos);
+    graficaItems(rowsActivos, fg);
+    concentradoProyecto(rowsActivos);
+    concentradoArea(rowsActivos);
+    concentradoDominio(rowsActivos);
     tablaIndividual(rows);
     guiaUno(rows);
+    historialPersonal(rows);
     comentarios(coms);
     historico();
-    llenarPrintSub(rows, fg);
+    llenarPrintSub(rowsActivos, fg);
   }
+
+  // Delegación de eventos: los botones de anular/restaurar se reconstruyen en cada render(),
+  // así que se escuchan sobre el documento en vez de re-enganchar onclick por cada tabla.
+  document.addEventListener("click", e => {
+    const b = e.target.closest(".btn-anular");
+    if (b) anularFila(b.dataset.id, b.dataset.accion === "anular", b);
+  });
 
   function llenarPrintSub(rows, fg) {
     const fc = $("#f-campana").value || "Todas", fa = $("#f-area").value || "Todas";
@@ -1280,7 +1374,7 @@ window.NOM035 = (function () {
   function kpis(rows) {
     const frec = soloFrec(rows);
     const prom = promedio(frec.map(promRiesgo).filter(v => v != null));
-    const conCanal = rows.filter(r => r.resultado && r.resultado.guiaI && r.resultado.requiereValoracion).length;
+    const conCanal = rows.filter(esPendienteG1).length;
     const g1 = rows.filter(r => r["Guía"] === "Guía I").length;
     const altos = frec.filter(r => /Alto/.test(r.resultado.nivel)).length;
     const k = [
@@ -1455,15 +1549,22 @@ window.NOM035 = (function () {
 
   /* ---- detalle individual ---- */
   function tablaIndividual(rows) {
-    $("#n-ind").textContent = rows.length;
-    let html = "<tr><th>Fecha</th><th>Guía</th><th>Nombre</th><th>Proyecto</th><th>Área</th><th>Puesto</th><th>Puntaje</th><th>Nivel</th><th>Coment.</th></tr>";
+    $("#n-ind").textContent = rows.filter(esActiva).length + (rows.some(r => !esActiva(r)) ? ` (+${rows.filter(r => !esActiva(r)).length} anuladas)` : "");
+    const veces = {};
+    rows.forEach(r => { const k = personaKey(r); if (k) veces[k] = (veces[k] || 0) + 1; });
+    let html = "<tr><th>Fecha</th><th>Guía</th><th>Nombre</th><th>Proyecto</th><th>Área</th><th>Puesto</th><th>Puntaje</th><th>Nivel</th><th>Coment.</th><th>Veces</th><th class='no-print'>Acción</th></tr>";
     html += rows.slice().reverse().map(r => {
       const res = r.resultado || {};
       const puntaje = res.total !== undefined ? res.total : (res.guiaI ? "—" : "");
       const nivel = res.nivel || (res.guiaI ? (res.requiereValoracion ? "Requiere valoración clínica" : "No requiere valoración clínica") : "");
-      return `<tr><td>${fFecha(r["Marca temporal"])}</td><td>${r["Guía"]}</td><td>${r["Nombre"] ? escapar(r["Nombre"]) : "<i>(sin nombre)</i>"}</td>` +
+      const k = personaKey(r), n = k ? veces[k] : 1;
+      const anulada = !esActiva(r);
+      const filaEstilo = anulada ? ' style="opacity:.55"' : "";
+      return `<tr${filaEstilo}><td>${fFecha(r["Marca temporal"])}</td><td>${r["Guía"]}</td><td>${r["Nombre"] ? escapar(r["Nombre"]) : "<i>(sin nombre)</i>"}</td>` +
         `<td>${escapar(proyectoDe(r).id)}</td><td>${escapar(r["Área"] || "")}</td><td>${escapar(r["Puesto"] || "")}</td><td>${puntaje}</td><td>${res.nivel ? chip(nivel) : nivel}</td>` +
-        `<td>${r["Tiene comentarios"] === "Sí" ? "Sí" : ""}</td></tr>`;
+        `<td>${r["Tiene comentarios"] === "Sí" ? "Sí" : ""}</td>` +
+        `<td>${n > 1 ? `<span class="chip n-medio" title="Esta persona respondió ${n} veces">🔁 ${n}</span>` : ""}</td>` +
+        accionesFila(r, estadoBadge(r)) + "</tr>";
     }).join("");
     $("#tbl-individual").innerHTML = html;
   }
@@ -1474,22 +1575,26 @@ window.NOM035 = (function () {
 
   function guiaUno(rows) {
     G1_ROWS = rows.filter(r => r["Guía"] === "Guía I" && r.resultado);
-    const requiere = G1_ROWS.filter(r => r.resultado.requiereValoracion);
-    const evento = G1_ROWS.filter(r => r.resultado.eventoTraumatico);
+    const activos = G1_ROWS.filter(esActiva);
+    const pendientes = activos.filter(esPendienteG1);
+    const resueltos = activos.filter(r => r.resultado.requiereValoracion && esCorregidaG1(r));
+    const evento = activos.filter(r => r.resultado.eventoTraumatico);
+    const anuladas = G1_ROWS.length - activos.length;
     $("#kpis-g1").innerHTML = [
-      ["Respuestas Guía I", G1_ROWS.length],
+      ["Respuestas Guía I", activos.length],
       ["Reportan acontecimiento traumático", evento.length],
-      ["Requieren valoración clínica", requiere.length],
-      ["No requieren valoración", G1_ROWS.length - requiere.length]
+      ["Requieren valoración clínica (pendientes)", pendientes.length],
+      ["Ya resueltas (no requieren)", resueltos.length],
+      ["Anuladas", anuladas]
     ].map(x => `<div class="kpi"><b>${x[1]}</b><small>${x[0]}</small></div>`).join("");
     renderTablaG1();
   }
 
   function renderTablaG1() {
     const g1 = G1_ROWS.filter(r => {
-      if (G1_FILTRO === "req") return r.resultado.requiereValoracion;
-      if (G1_FILTRO === "noreq") return !r.resultado.requiereValoracion;
-      return true;
+      if (G1_FILTRO === "req") return esActiva(r) && esPendienteG1(r);
+      if (G1_FILTRO === "noreq") return esActiva(r) && !esPendienteG1(r);
+      return true; // "todos" incluye anuladas, para poder ubicarlas y restaurarlas aquí mismo
     });
     const ok = b => b ? '<b style="color:var(--brand)">OK</b>' : '<span class="muted">NA</span>';
     let html = "<tr><th>#</th><th>Nombre del evaluado</th><th>Proyecto</th><th>Área</th><th>Fecha</th>" +
@@ -1497,23 +1602,75 @@ window.NOM035 = (function () {
       "<th title='Sección II: recuerdos persistentes (≥1)'>II</th>" +
       "<th title='Sección III: esfuerzo por evitar (≥3)'>III</th>" +
       "<th title='Sección IV: afectación (≥2)'>IV</th>" +
-      "<th>Resultado</th><th class='no-print'>Carta</th></tr>";
+      "<th>Resultado</th><th class='no-print'>Carta</th><th class='no-print'>Corrección</th><th class='no-print'>Anular</th></tr>";
     html += g1.slice().reverse().map((r, i) => {
       const x = r.resultado, cr = x.criterios || {};
       const req = x.requiereValoracion;
+      const corregida = esCorregidaG1(r);
+      const anulada = !esActiva(r);
       const idx = g1.length - i;
+      const id = escapar(r["ID"] || "");
+      let resultadoHtml;
+      if (anulada) resultadoHtml = estadoBadge(r);
+      else if (corregida) {
+        const info = [r["Corregida por"], fFecha(r["Corregida fecha"])].filter(Boolean).join(" · ");
+        resultadoHtml = '<span class="chip n-nulo">Resuelta — ya no requiere</span>' +
+          (info ? `<div class="muted" style="font-size:.72rem">${escapar(info)}</div>` : "") +
+          (r["Corregida nota"] ? `<div class="muted" style="font-size:.72rem">${escapar(r["Corregida nota"])}</div>` : "");
+      } else resultadoHtml = req ? '<span class="chip n-muy">Requiere valoración clínica</span>' : '<span class="chip n-nulo">No requiere valoración clínica</span>';
+      const cartaHtml = (req && !corregida && !anulada) ? `<button class="btn ghost btn-carta" data-id="${id}" style="padding:5px 12px;font-size:.8rem">Generar carta</button>` : "";
+      const corrHtml = (req && !anulada) ? `<button class="btn ghost btn-corregir" data-id="${id}" data-accion="${corregida ? '0' : '1'}" style="padding:5px 10px;font-size:.78rem">${corregida ? "Revertir" : "Marcar resuelto"}</button>` : "";
       return `<tr><td>${idx}</td><td>${r["Nombre"] ? escapar(r["Nombre"]) : "<i>(sin nombre)</i>"}</td><td>${escapar(proyectoDe(r).id)}</td><td>${escapar(r["Área"] || "")}</td>` +
         `<td>${fFecha(r["Marca temporal"])}</td>` +
         `<td>${ok(x.eventoTraumatico)}</td><td>${ok(cr.II)}</td><td>${ok(cr.III)}</td><td>${ok(cr.IV)}</td>` +
-        `<td>${req ? '<span class="chip n-muy">Requiere valoración clínica</span>' : '<span class="chip n-nulo">No requiere valoración clínica</span>'}</td>` +
-        `<td class="no-print">${req ? `<button class="btn ghost btn-carta" data-id="${r["ID"] || ""}" style="padding:5px 12px;font-size:.8rem">Generar carta</button>` : ""}</td></tr>`;
+        `<td>${resultadoHtml}</td><td class="no-print">${cartaHtml}</td><td class="no-print">${corrHtml}</td>` +
+        accionesFila(r) + "</tr>";
     }).join("");
-    if (!g1.length) html = `<tr><td colspan='11'>${G1_ROWS.length ? "Ningún registro coincide con este filtro." : "Sin respuestas de Guía I en el filtro."}</td></tr>`;
+    if (!g1.length) html = `<tr><td colspan='13'>${G1_ROWS.length ? "Ningún registro coincide con este filtro." : "Sin respuestas de Guía I en el filtro."}</td></tr>`;
     $("#tbl-g1").innerHTML = html;
     $$("#tbl-g1 .btn-carta").forEach(b => b.onclick = () => {
       const r = G1_ROWS.find(x => (x["ID"] || "") === b.dataset.id);
       if (r) generarCarta(r);
     });
+    $$("#tbl-g1 .btn-corregir").forEach(b => b.onclick = () => corregirG1Fila(b.dataset.id, b.dataset.accion === "1", b));
+  }
+
+  /* ---- Historial por persona: quién contestó dos o más veces ---- */
+  function historialPersonal(rows) {
+    const grupos = {};
+    rows.forEach(r => {
+      const k = personaKey(r);
+      if (!k) return;
+      (grupos[k] = grupos[k] || []).push(r);
+    });
+    const repetidos = Object.values(grupos).filter(g => g.length > 1)
+      .sort((a, b) => b.length - a.length || (a[0]["Nombre"] || "").localeCompare(b[0]["Nombre"] || ""));
+    const cont = $("#n-historial-personas");
+    if (cont) cont.textContent = repetidos.length;
+    const tbl = $("#tbl-historial-personal");
+    if (!tbl) return;
+    if (!repetidos.length) {
+      tbl.innerHTML = "<tr><td>Nadie del filtro actual respondió más de una vez.</td></tr>";
+      return;
+    }
+    let html = "<tr><th>Persona</th><th>Fecha</th><th>Campaña</th><th>Guía</th><th>Proyecto</th><th>Resultado</th><th class='no-print'>Acción</th></tr>";
+    repetidos.forEach(g => {
+      const ordenado = g.slice().sort((a, b) => new Date(a["Marca temporal"]) - new Date(b["Marca temporal"]));
+      const cab = ordenado[0];
+      html += `<tr style="background:var(--brand-050)"><td colspan="7"><b>${escapar(cab["Nombre"])}</b> — ${escapar(cab["Área"] || cab["Puesto"] || "sin área/puesto")} ` +
+        `<span class="chip n-medio">🔁 ${ordenado.length} registros</span></td></tr>`;
+      ordenado.forEach(r => {
+        const res = r.resultado || {};
+        const resultadoTxt = res.guiaI
+          ? (esCorregidaG1(r) ? "Resuelta (ya no requiere)" : (res.requiereValoracion ? "Requiere valoración clínica" : "No requiere valoración"))
+          : (res.nivel || "—");
+        const anulada = !esActiva(r);
+        html += `<tr${anulada ? ' style="opacity:.55"' : ""}><td></td><td>${fFecha(r["Marca temporal"])}</td><td>${escapar(r["Campaña"] || "")}</td>` +
+          `<td>${escapar(r["Guía"] || "")}</td><td>${escapar(proyectoDe(r).id)}</td><td>${res.nivel ? chip(resultadoTxt) : resultadoTxt}${anulada ? " " + estadoBadge(r) : ""}</td>` +
+          accionesFila(r) + "</tr>";
+      });
+    });
+    tbl.innerHTML = html;
   }
 
   /* ---- Carta de Canalización ITC-FMT-A-004-04 ---- */
@@ -1590,7 +1747,7 @@ el bienestar y la salud de nuestro talento.</p>
     // cuestionarios aplicados (ver promRiesgo()).
     const porCamp = {}, porCampG2 = {}, porCampG3 = {};
     const fpH = $("#f-proyecto").value;
-    const base = DATA.respuestas.filter(r => !fpH || proyectoDe(r).id === fpH);
+    const base = DATA.respuestas.filter(r => esActiva(r) && (!fpH || proyectoDe(r).id === fpH));
     base.forEach(r => {
       if (r["Guía"] === "Guía I" || !r.resultado || r.resultado.total === undefined) return;
       const v = promRiesgo(r);
@@ -1656,7 +1813,11 @@ el bienestar y la salud de nuestro talento.</p>
         "Guía I: Sec. III": res.guiaI ? (res.criterios && res.criterios.III ? "OK" : "NA") : "",
         "Guía I: Sec. IV": res.guiaI ? (res.criterios && res.criterios.IV ? "OK" : "NA") : "",
         "Guía I: resultado": res.guiaI ? (res.requiereValoracion ? "Requiere valoración clínica" : "No requiere valoración clínica") : "",
-        Comentarios: r["Tiene comentarios"] === "Sí" ? "Sí" : ""
+        Comentarios: r["Tiene comentarios"] === "Sí" ? "Sí" : "",
+        Anulada: esActiva(r) ? "" : "Sí",
+        "Anulada fecha": fFecha(r["Anulada fecha"]), "Anulada por": r["Anulada por"] || "",
+        "Guía I: corregida (ya no requiere)": esCorregidaG1(r) ? "Sí" : "",
+        "Corregida fecha": fFecha(r["Corregida fecha"]), "Corregida por": r["Corregida por"] || "", "Corregida nota": r["Corregida nota"] || ""
       };
       const dom = res.dominios || {};
       Object.entries(dom).forEach(([k, v]) => { base["Dom: " + k] = v && v.promedio != null ? v.promedio : ""; });
@@ -1670,7 +1831,9 @@ el bienestar y la salud de nuestro talento.</p>
         "#": i + 1, "Nombre del evaluado": r["Nombre"] || "(sin nombre)", "Proyecto ID": proyectoDe(r).id, "Área": r["Área"] || "",
         Fecha: fFecha(r["Marca temporal"]),
         I: x.eventoTraumatico ? "OK" : "NA", II: cr.II ? "OK" : "NA", III: cr.III ? "OK" : "NA", IV: cr.IV ? "OK" : "NA",
-        Resultado: x.requiereValoracion ? "Requiere valoración clínica" : "No requiere valoración clínica"
+        Resultado: esCorregidaG1(r) ? "Resuelta (ya no requiere)" : (x.requiereValoracion ? "Requiere valoración clínica" : "No requiere valoración clínica"),
+        Anulada: esActiva(r) ? "" : "Sí",
+        "Corrección fecha": fFecha(r["Corregida fecha"]), "Corrección por": r["Corregida por"] || "", "Corrección nota": r["Corregida nota"] || ""
       };
     });
     if (anexoA.length) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(anexoA), "Anexo A - Guía I");
