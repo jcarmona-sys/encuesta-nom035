@@ -523,6 +523,16 @@ canvas{max-width:100%}
         <div class="acciones"><button class="btn" id="btn-crear-proy">Crear proyecto</button></div>
         <div id="np-resultado" style="margin-top:14px"></div>
       </div>
+
+      <div class="card hidden no-print" id="bloque-respaldo">
+        <h3 style="margin-top:0">Respaldo completo (sólo este equipo)</h3>
+        <p class="muted">Exporta <b>todo</b> lo que hay en la base de datos: todas las campañas y proyectos, todas las respuestas (activas y anuladas, con sus correcciones), comentarios y el registro de proyectos con sus claves. Pensado para conservar la información aunque se pierda acceso a Google Sheets, no para compartirse — por eso sólo aparece en este equipo.</p>
+        <div class="acciones">
+          <button class="btn ghost" id="btn-respaldo-excel">Exportar respaldo completo (Excel)</button>
+          <button class="btn ghost" id="btn-respaldo-sql">Exportar respaldo completo (SQL)</button>
+        </div>
+        <p class="muted" id="respaldo-estado" style="margin-top:10px"></p>
+      </div>
     </div>
 
     <div class="print-foot print-only">In Time Control · Documento de uso interno · Confidencial · NOM-035-STPS-2018</div>
@@ -1041,6 +1051,56 @@ window.NOM035 = (function () {
   let DATA = null;          // respuesta completa del API
   let charts = {};
 
+  /* ---- Respaldo completo: visible sólo en este equipo ----
+   * GitHub Pages es un sitio estático y Apps Script nunca ve la IP de la red local (queda detrás del
+   * router), así que ninguno de los dos puede filtrar por "192.168.40.119" de verdad. En vez de eso,
+   * este equipo se activa UNA sola vez visitando el panel con ?habilitar_respaldo=192.168.40.119 en la
+   * URL; eso guarda una marca en este navegador (localStorage, nunca sale de este equipo ni se comparte
+   * con nadie) y a partir de ahí el bloque de respaldo aparece siempre aquí. Para apagarlo en este
+   * equipo: ?deshabilitar_respaldo=1. Como respaldo, también se intenta detectar la IP local por WebRTC,
+   * aunque Chrome moderno ya no la expone (la oculta detrás de un nombre ".local"), así que no es
+   * confiable — el mecanismo real es la marca guardada en el navegador.
+   * OJO: esto oculta el bloque en otros equipos, no es una medida de seguridad de verdad — quien tenga
+   * la clave maestra y abra la consola del navegador podría ver estas funciones igual. La protección
+   * real sigue siendo la clave maestra. */
+  const IP_RESPALDO = "192.168.40.119";
+  const MARCA_RESPALDO = "nom035_respaldo_local";
+  (function activarRespaldoPorURL() {
+    const qs = new URLSearchParams(location.search);
+    try {
+      if (qs.get("habilitar_respaldo") === IP_RESPALDO) localStorage.setItem(MARCA_RESPALDO, "1");
+      if (qs.get("deshabilitar_respaldo") === "1") localStorage.removeItem(MARCA_RESPALDO);
+    } catch (x) {}
+  })();
+  function respaldoHabilitadoLocal() {
+    try { return localStorage.getItem(MARCA_RESPALDO) === "1"; } catch (x) { return false; }
+  }
+  /* Mejor esfuerzo, no confiable en navegadores modernos (ver nota arriba) */
+  function detectarIpLocal() {
+    return new Promise(resolve => {
+      try {
+        const pc = new RTCPeerConnection({ iceServers: [] });
+        let hallada = null;
+        pc.createDataChannel("");
+        pc.onicecandidate = e => {
+          if (!e || !e.candidate) { try { pc.close(); } catch (x) {} resolve(hallada); return; }
+          const m = /(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})/.exec(e.candidate.candidate);
+          if (m && m[1] === IP_RESPALDO) hallada = m[1];
+        };
+        pc.createOffer().then(o => pc.setLocalDescription(o)).catch(() => resolve(null));
+        setTimeout(() => { try { pc.close(); } catch (x) {} resolve(hallada); }, 1200);
+      } catch (x) { resolve(null); }
+    });
+  }
+  function actualizarVisibilidadRespaldo() {
+    const bloque = $("#bloque-respaldo");
+    if (!bloque) return;
+    const esAdmin = DATA && DATA.alcance && DATA.alcance.rol === "admin";
+    if (!esAdmin) { bloque.classList.add("hidden"); return; }
+    if (respaldoHabilitadoLocal()) { bloque.classList.remove("hidden"); return; }
+    detectarIpLocal().then(ip => { if (ip === IP_RESPALDO) { try { localStorage.setItem(MARCA_RESPALDO, "1"); } catch (x) {} bloque.classList.remove("hidden"); } });
+  }
+
   if (window.Chart) {
     Chart.defaults.font.family = "'Inter','Segoe UI',sans-serif";
     Chart.defaults.font.size = 12;
@@ -1088,6 +1148,7 @@ window.NOM035 = (function () {
         $("#panel").classList.remove("hidden");
         prepararFiltros();
         render();
+        actualizarVisibilidadRespaldo();
       })
       .catch(err => {
         $("#err-acc").textContent = "No se pudo entrar: " + err.message;
@@ -1226,6 +1287,8 @@ window.NOM035 = (function () {
       renderTablaG1();
     });
     if ($("#btn-crear-proy")) $("#btn-crear-proy").onclick = crearProyecto;
+    if ($("#btn-respaldo-excel")) $("#btn-respaldo-excel").onclick = () => exportarRespaldoCompleto("excel");
+    if ($("#btn-respaldo-sql")) $("#btn-respaldo-sql").onclick = () => exportarRespaldoCompleto("sql");
   }
 
   /* ---- Gestionar proyectos (sólo clave maestra) ---- */
@@ -1276,6 +1339,96 @@ window.NOM035 = (function () {
       })
       .catch(err => errNP("No se pudo crear (" + err.message + ")."))
       .finally(() => { btn.disabled = false; btn.textContent = "Crear proyecto"; });
+  }
+
+  /* ---- Respaldo completo (sólo este equipo, ver actualizarVisibilidadRespaldo) ----
+   * Exporta TODO lo que la clave con la que se entró alcanza a ver (con la maestra: todo) sin aplicar
+   * los filtros del panel: todas las campañas, proyectos, respuestas (activas y anuladas, con sus
+   * correcciones de Guía I) y comentarios, más el registro de proyectos con sus claves. */
+  function descargarArchivo(contenido, nombre, tipo) {
+    const blob = new Blob([contenido], { type: tipo + ";charset=utf-8" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = nombre;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+  }
+  function filaPlana(o) {
+    // quita las copias ya "parseadas" de los JSON (respuestas/resultado): el respaldo conserva la
+    // columna de texto original ("Respuestas (JSON)"/"Resultado (JSON)"), que es la que vive en la hoja.
+    const p = {};
+    Object.keys(o).forEach(k => { if (k !== "respuestas" && k !== "resultado") p[k] = o[k]; });
+    return p;
+  }
+  function exportarRespaldoCompleto(formato) {
+    const estado = $("#respaldo-estado");
+    if (estado) estado.textContent = "Generando respaldo…";
+    api({ action: "proyectos" }).then(res => {
+      const proyectos = (res && res.ok) ? res.proyectos : [];
+      const respuestas = (DATA.respuestas || []).map(filaPlana);
+      const comentarios = (DATA.comentarios || []).map(filaPlana);
+      const sello = new Date().toISOString().slice(0, 10);
+      if (formato === "sql") {
+        const sql = construirRespaldoSQL(respuestas, comentarios, proyectos);
+        descargarArchivo(sql, `NOM035_respaldo_completo_${sello}.sql`, "application/sql");
+      } else {
+        construirRespaldoExcel(respuestas, comentarios, proyectos, sello);
+      }
+      if (estado) estado.textContent = `Respaldo generado: ${respuestas.length} respuestas, ${comentarios.length} comentarios, ${proyectos.length} proyectos.`;
+    }).catch(err => { if (estado) estado.textContent = "No se pudo generar el respaldo (" + err.message + ")."; });
+  }
+  function construirRespaldoExcel(respuestas, comentarios, proyectos, sello) {
+    const wb = XLSX.utils.book_new();
+    const resumenMap = {};
+    respuestas.forEach(r => {
+      const key = [proyectoDe(r).id, r["Campaña"] || "", r["Guía"] || ""].join("|");
+      resumenMap[key] = (resumenMap[key] || 0) + 1;
+    });
+    const resumen = Object.entries(resumenMap).map(([k, n]) => {
+      const [proyecto, campana, guia] = k.split("|");
+      return { Proyecto: proyecto, Campaña: campana, Guía: guia, Respuestas: n };
+    }).sort((a, b) => a.Proyecto.localeCompare(b.Proyecto) || a.Campaña.localeCompare(b.Campaña) || a.Guía.localeCompare(b.Guía));
+    resumen.push({ Proyecto: "TOTAL", Campaña: "", Guía: "", Respuestas: respuestas.length });
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(resumen), "Resumen");
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(respuestas), "Respuestas");
+    if (comentarios.length) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(comentarios), "Comentarios");
+    if (proyectos.length) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(proyectos), "Proyectos");
+    XLSX.writeFile(wb, `NOM035_respaldo_completo_${sello}.xlsx`);
+  }
+  function sqlIdent(s) {
+    const t = String(s || "col").trim().toLowerCase()
+      .replace(/[áà]/g, "a").replace(/[éè]/g, "e").replace(/[íì]/g, "i").replace(/[óò]/g, "o").replace(/[úù]/g, "u").replace(/ñ/g, "n")
+      .replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+    return t || "col";
+  }
+  function sqlValor(v) {
+    if (v === null || v === undefined || v === "") return "NULL";
+    if (typeof v === "number") return String(v);
+    return "'" + String(v).replace(/\\/g, "\\\\").replace(/'/g, "\\'") + "'";
+  }
+  function construirTablaSQL(nombreTabla, filas) {
+    if (!filas.length) return `-- ${nombreTabla}: sin filas en el alcance de esta clave\n\n`;
+    const cols = Object.keys(filas[0]);
+    const colsSql = cols.map(sqlIdent);
+    let out = `DROP TABLE IF EXISTS \`${nombreTabla}\`;\n`;
+    out += `CREATE TABLE \`${nombreTabla}\` (\n  \`id\` INT AUTO_INCREMENT PRIMARY KEY,\n` +
+      colsSql.map(c => `  \`${c}\` TEXT`).join(",\n") + "\n) CHARACTER SET utf8mb4;\n\n";
+    const nombresCol = "(" + colsSql.map(c => "`" + c + "`").join(", ") + ")";
+    filas.forEach(f => {
+      const vals = cols.map(c => sqlValor(f[c]));
+      out += `INSERT INTO \`${nombreTabla}\` ${nombresCol} VALUES (${vals.join(", ")});\n`;
+    });
+    return out + "\n";
+  }
+  function construirRespaldoSQL(respuestas, comentarios, proyectos) {
+    let out = "-- Respaldo completo · Encuesta NOM-035 por QR · In Time Control\n" +
+      `-- Generado: ${new Date().toISOString()}\n` +
+      "-- Incluye todas las campañas y proyectos al alcance de la clave usada (la clave maestra ve todo).\n" +
+      "-- Compatible con MySQL/MariaDB (CREATE TABLE + INSERT); ajusta el motor si usas otro gestor.\n\n";
+    out += construirTablaSQL("respuestas", respuestas);
+    out += construirTablaSQL("comentarios", comentarios);
+    out += construirTablaSQL("proyectos", proyectos);
+    return out;
   }
 
   /* ---- filtrado ---- */
