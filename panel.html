@@ -1408,23 +1408,53 @@ window.NOM035 = (function () {
   }
   function construirTablaSQL(nombreTabla, filas) {
     if (!filas.length) return `-- ${nombreTabla}: sin filas en el alcance de esta clave\n\n`;
-    const cols = Object.keys(filas[0]);
-    const colsSql = cols.map(sqlIdent);
+    const colsOriginales = Object.keys(filas[0]);
+    // Normaliza cada encabezado a un identificador SQL y deduplica si dos encabezados distintos
+    // coinciden en el mismo nombre normalizado (p. ej. acentos/mayúsculas distintas).
+    const vistos = {};
+    const cols = colsOriginales.map(sqlIdent).map(c => {
+      let n = c, i = 2;
+      while (vistos[n]) n = c + "_" + (i++);
+      vistos[n] = true;
+      return n;
+    });
+    // La hoja ya trae su propio "ID" (folio único: de la respuesta, del comentario o del proyecto).
+    // Se usa COMO llave primaria en vez de agregar un "id" autonumérico aparte — si no, "ID" (-> "id")
+    // choca con ese autonumérico y el CREATE TABLE truena con "Duplicate column name 'id'".
+    const idxId = cols.indexOf("id");
+    const defsCol = cols.map((c, i) => `  \`${c}\` ${i === idxId ? "VARCHAR(64)" : "TEXT"}`);
     let out = `DROP TABLE IF EXISTS \`${nombreTabla}\`;\n`;
-    out += `CREATE TABLE \`${nombreTabla}\` (\n  \`id\` INT AUTO_INCREMENT PRIMARY KEY,\n` +
-      colsSql.map(c => `  \`${c}\` TEXT`).join(",\n") + "\n) CHARACTER SET utf8mb4;\n\n";
-    const nombresCol = "(" + colsSql.map(c => "`" + c + "`").join(", ") + ")";
+    out += `CREATE TABLE \`${nombreTabla}\` (\n`;
+    out += idxId === -1
+      ? "  `id` INT AUTO_INCREMENT PRIMARY KEY,\n" + defsCol.join(",\n")
+      : defsCol.map((d, i) => i === idxId ? d + " PRIMARY KEY" : d).join(",\n");
+    out += "\n) CHARACTER SET utf8mb4;\n\n";
+    const nombresCol = "(" + cols.map(c => "`" + c + "`").join(", ") + ")";
     filas.forEach(f => {
-      const vals = cols.map(c => sqlValor(f[c]));
+      const vals = colsOriginales.map(c => sqlValor(f[c]));
       out += `INSERT INTO \`${nombreTabla}\` ${nombresCol} VALUES (${vals.join(", ")});\n`;
     });
     return out + "\n";
   }
   function construirRespaldoSQL(respuestas, comentarios, proyectos) {
-    let out = "-- Respaldo completo · Encuesta NOM-035 por QR · In Time Control\n" +
+    const bd = "nom035_respaldo";
+    let out = "-- ============================================================================\n" +
+      "-- Respaldo completo · Encuesta NOM-035 por QR · In Time Control\n" +
       `-- Generado: ${new Date().toISOString()}\n` +
       "-- Incluye todas las campañas y proyectos al alcance de la clave usada (la clave maestra ve todo).\n" +
-      "-- Compatible con MySQL/MariaDB (CREATE TABLE + INSERT); ajusta el motor si usas otro gestor.\n\n";
+      "-- Compatible con MySQL/MariaDB.\n" +
+      "--\n" +
+      "-- CÓMO USAR ESTE ARCHIVO (es autosuficiente: crea su propia base de datos, no hace falta nada más)\n" +
+      "--  · Línea de comandos:      mysql -u root -p < este_archivo.sql\n" +
+      "--  · HeidiSQL / DBeaver / MySQL Workbench: Archivo > Ejecutar script SQL (o \"Cargar archivo SQL\"),\n" +
+      "--    elige este archivo y ejecútalo completo. No hace falta crear la base antes: el script la crea sola.\n" +
+      `--  · Al terminar, los datos quedan en la base \`${bd}\`, tablas \`respuestas\`, \`comentarios\` y \`proyectos\`.\n` +
+      "--  · \"id\" en comentarios.id y respuestas.id son el mismo folio (liga comentario↔respuesta); \"proyecto_id\"\n" +
+      "--    en respuestas/comentarios liga con proyectos.id. No se crean FOREIGN KEY por si faltara algún folio\n" +
+      "--    huérfano (p. ej. de un proyecto capturado como \"Otro\" y luego editado).\n" +
+      "-- ============================================================================\n\n" +
+      `CREATE DATABASE IF NOT EXISTS \`${bd}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_spanish_ci;\n` +
+      `USE \`${bd}\`;\n\n`;
     out += construirTablaSQL("respuestas", respuestas);
     out += construirTablaSQL("comentarios", comentarios);
     out += construirTablaSQL("proyectos", proyectos);
